@@ -1,0 +1,11 @@
+# sshj and BouncyCastle use reflection for algorithm lookup.
+-keep class net.schmizz.** { *; }
+-keep class com.hierynomus.** { *; }
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+-dontwarn net.schmizz.**
+-dontwarn com.hierynomus.**
+-dontwarn javax.naming.**
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.security.auth.login.**
+-dontwarn org.slf4j.**
