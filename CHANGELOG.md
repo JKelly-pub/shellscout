@@ -3,6 +3,16 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
+## 0.6.0 (2026-10-26)
+
+### New: install a key on a server
+- **Settings → Keys → Install on server** adds a key to `~/.ssh/authorized_keys` on a server you're
+  connected to, like `ssh-copy-id`. Connect with your password, pick the server, tap Install.
+- Ticked by default, "Sign in to this host with the key from now on" switches the saved host to
+  key login. Your saved password is kept.
+- A key that's already there isn't added twice, existing keys are kept, and a new `~/.ssh` gets the
+  permissions the SSH server requires.
+
 ## 0.5.1 (2026-10-26)
 
 ### Security
