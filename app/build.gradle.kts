@@ -12,8 +12,8 @@ android {
         applicationId = "app.shellscout"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 7
-        versionName = "0.5.0"
+        versionCode = 8
+        versionName = "0.5.1"
     }
 
     // CP-03: the release key lives outside the repo. Set these four in ~/.gradle/gradle.properties

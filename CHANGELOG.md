@@ -3,6 +3,13 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
+## 0.5.1 (2026-10-26)
+
+### Security
+- Bouncy Castle updated from 1.84 to 1.85, which fixes a nesting-depth check in ASN.1 parsing
+  (used when reading key files) and a certificate name-constraints bypass. SSH connections don't
+  use X.509 certificate chains, so the second didn't affect how ShellScout connects.
+
 ## 0.5.0 (2026-10-26)
 
 First public release of ShellScout, an SSH terminal and SFTP file manager for Android phones,

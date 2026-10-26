@@ -48,7 +48,7 @@ private val COMPONENTS = listOf(
         Licence.APACHE_2,
     ),
     Component("sshj and asn-one", "Copyright (C) 2009 SSHJ Contributors", Licence.APACHE_2),
-    Component("Bouncy Castle (bcprov, bcpkix, bcutil)", "Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc.", Licence.BOUNCY_CASTLE),
+    Component("Bouncy Castle (bcprov, bcpkix, bcutil)", "Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.", Licence.BOUNCY_CASTLE),
     Component("SLF4J", "Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)", Licence.MIT_SLF4J),
     Component("AndroidX and Jetpack Compose", "The Android Open Source Project", Licence.APACHE_2),
     Component("Kotlin standard library and kotlinx.coroutines", "JetBrains and Kotlin contributors", Licence.APACHE_2),

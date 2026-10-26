@@ -23,7 +23,7 @@ Modified files say so in their header.
 | --- | --- | --- |
 | com.hierynomus:sshj | 0.41.2 | Apache-2.0 |
 | com.hierynomus:asn-one (via sshj) | 0.6.0 | Apache-2.0 |
-| org.bouncycastle:bcprov-jdk18on / bcpkix-jdk18on / bcutil-jdk18on | 1.84 | Bouncy Castle Licence (MIT-style) |
+| org.bouncycastle:bcprov-jdk18on / bcpkix-jdk18on / bcutil-jdk18on | 1.85 | Bouncy Castle Licence (MIT-style) |
 | org.slf4j:slf4j-api / slf4j-nop | 2.0.17 / 2.0.16 | MIT |
 | AndroidX (Compose, Material 3, Room, Lifecycle, Activity, Fragment, Biometric, DocumentFile, Core and their dependencies) | see `gradle/libs.versions.toml` | Apache-2.0 |
 | Kotlin stdlib, kotlinx-coroutines | 2.4.21 / 1.9.0 | Apache-2.0 |
