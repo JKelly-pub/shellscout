@@ -86,3 +86,21 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for build, signing and testing no
 Apache-2.0 (see [LICENSE](LICENSE)). Copyright 2026 James Kelly. The terminal emulator is adapted from
 [Termux](https://github.com/termux/termux-app) under Apache-2.0; see [NOTICE.md](NOTICE.md) for
 all third-party components.
+
+## Disclaimer
+
+ShellScout is a personal project, shared in the hope that it is useful. It is provided **"as is",
+without warranty of any kind**, and without any obligation to provide support, fixes or updates.
+Issues and pull requests are welcome but may not get a response.
+
+ShellScout works directly on your servers: it runs commands, and it can move, overwrite and delete
+files. You use it at your own risk. Keep backups, and check what an action will do before you
+confirm it. To the extent the law allows, the author is not liable for any loss or damage arising
+from its use, including lost data, downtime or security incidents. The full terms are in sections 7
+and 8 of the [Apache License 2.0](LICENSE).
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
+
+ShellScout is not affiliated with or endorsed by Google, Samsung, OpenSSH or any server or hosting
+provider. Android is a trademark of Google LLC, and Samsung DeX is a trademark of Samsung
+Electronics Co., Ltd.
