@@ -5,7 +5,8 @@
 ShellScout puts a full terminal and a file manager for your servers in one app. Open several
 sessions at once, browse and edit remote files beside the terminal, and move files between your
 device and your servers. Sessions and transfers keep running while you switch apps. The layout
-adapts to the screen, from a phone up to a 12" tablet with a keyboard.
+adapts to the screen, from phones to tablets with a keyboard, and in Samsung DeX it scales to fit an
+external monitor.
 
 ## Features
 
