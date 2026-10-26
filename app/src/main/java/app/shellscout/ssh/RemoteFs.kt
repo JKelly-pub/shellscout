@@ -134,6 +134,31 @@ class RemoteFs(private val connection: SshConnection) {
         return done
     }
 
+    /**
+     * AU-05: adds [publicKey] (one OpenSSH line) to ~/.ssh/authorized_keys, like ssh-copy-id.
+     * A key already there, matched on its type and data and not its comment, is left alone.
+     * Returns true if the key was added, false if it was already there.
+     */
+    suspend fun authorizeKey(publicKey: String): Boolean {
+        val line = publicKey.trim()
+        val keyPart = line.split(Regex("\\s+")).take(2).joinToString(" ")
+        // Run by sh whatever the login shell is (fish, for one, can't parse this). umask makes a
+        // new ~/.ssh 700 and the file 600, as sshd requires. A last line without a newline would
+        // join onto the key, so one is added first.
+        val script = "umask 077 && mkdir -p ~/.ssh && f=~/.ssh/authorized_keys && touch \"\$f\" && " +
+            "if grep -qF ${quote(keyPart)} \"\$f\"; then echo SHELLSCOUT_PRESENT; else " +
+            "{ [ ! -s \"\$f\" ] || [ -z \"\$(tail -c 1 \"\$f\")\" ] || echo >> \"\$f\"; } && " +
+            "printf '%s\\n' ${quote(line)} >> \"\$f\" && echo SHELLSCOUT_ADDED; fi"
+        val result = connection.exec("sh -c ${quote(script)} 2>&1")
+        return when {
+            "SHELLSCOUT_ADDED" in result.output -> true
+            "SHELLSCOUT_PRESENT" in result.output -> false
+            else -> throw IllegalStateException(
+                "Couldn't add the key: " + result.output.trim().lines().takeLast(2).joinToString(" ").ifBlank { "exit status ${result.exitStatus}" },
+            )
+        }
+    }
+
     private suspend fun run(tool: String, command: String) {
         val result = connection.exec(command)
         if (result.exitStatus != 0) {

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,10 +19,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -54,7 +57,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import app.shellscout.data.AuthMethod
 import app.shellscout.data.KeyEntity
+import app.shellscout.ssh.RemoteFs
 import app.shellscout.security.GeneratedKeyType
 import app.shellscout.security.PassphraseRequiredException
 import app.shellscout.ui.common.LocalContainer
@@ -69,6 +74,7 @@ fun KeysScreen(onBack: (() -> Unit)? = null) {
     val keys by container.db.keys().observeAll().collectAsState(initial = emptyList())
     var dialog by remember { mutableStateOf<String?>(null) } // "generate" | "import"
     var confirmDelete by remember { mutableStateOf<KeyEntity?>(null) }
+    var installing by remember { mutableStateOf<KeyEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -88,7 +94,7 @@ fun KeysScreen(onBack: (() -> Unit)? = null) {
             if (keys.isEmpty()) {
                 item {
                     Text(
-                        "No keys yet. Generate an Ed25519 key, then add its public key to ~/.ssh/authorized_keys on your servers.",
+                        "No keys yet. Generate an Ed25519 key, then use Install on server to add it to a server you're connected to.",
                         modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -100,6 +106,10 @@ fun KeysScreen(onBack: (() -> Unit)? = null) {
                         Column {
                             Text(k.keyType + if (k.passphraseProtected) " · passphrase" else "", style = MaterialTheme.typography.labelMedium)
                             Text(k.publicKeyOpenSsh, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = { installing = k }, modifier = Modifier.padding(top = 4.dp)) {
+                                Icon(Icons.Default.Dns, null, modifier = Modifier.padding(end = 8.dp))
+                                Text("Install on server")
+                            }
                         }
                     },
                     trailingContent = {
@@ -137,6 +147,83 @@ fun KeysScreen(onBack: (() -> Unit)? = null) {
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
         )
     }
+    installing?.let { k -> InstallKeyDialog(k, onDismiss = { installing = null }) }
+}
+
+/**
+ * AU-05: adds a key's public half to a server through a session that is already signed in (usually
+ * with a password), then optionally switches that host to sign in with the key from then on.
+ */
+@Composable
+private fun InstallKeyDialog(key: KeyEntity, onDismiss: () -> Unit) {
+    val container = LocalContainer.current
+    val scope = rememberCoroutineScope()
+    val tabs by container.sessions.tabs.collectAsState()
+    // One entry per host: two tabs on the same server would install to the same account.
+    val live = tabs.filter { container.sessions.isLive(it) }.distinctBy { it.host.id }
+    var chosen by remember { mutableStateOf(live.firstOrNull()?.id) }
+    var useKey by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Install \"${key.name}\"") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (live.isEmpty()) {
+                    Text("Connect to the server with your password first, then come back here. The key is added to that session's account.")
+                } else {
+                    Text("Adds this key to ~/.ssh/authorized_keys for the account you're signed in as:")
+                    live.forEach { tab ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { chosen = tab.id },
+                        ) {
+                            RadioButton(selected = chosen == tab.id, onClick = { chosen = tab.id })
+                            Column {
+                                Text(tab.host.name)
+                                Text("${tab.host.username}@${tab.host.hostname}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { useKey = !useKey }) {
+                        Checkbox(checked = useKey, onCheckedChange = { useKey = it })
+                        Text("Sign in to this host with the key from now on")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && live.any { it.id == chosen },
+                onClick = {
+                    val tab = live.first { it.id == chosen }
+                    busy = true
+                    scope.launch {
+                        try {
+                            val added = RemoteFs(tab.connection).authorizeKey(key.publicKeyOpenSsh)
+                            if (useKey) {
+                                container.db.hosts().get(tab.host.id)?.let { h ->
+                                    container.db.hosts().update(h.copy(authMethod = AuthMethod.KEY, keyId = key.id))
+                                }
+                            }
+                            container.sessions.post(
+                                (if (added) "Key added on ${tab.host.name}" else "${tab.host.name} already had this key") +
+                                    if (useKey) ". It signs in with the key from the next connection." else "",
+                            )
+                            onDismiss()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            container.sessions.post(e.message ?: "Couldn't add the key")
+                            busy = false
+                        }
+                    }
+                },
+            ) { Text(if (busy) "Installing…" else "Install") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
+    )
 }
 
 @Composable

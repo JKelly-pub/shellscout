@@ -36,7 +36,7 @@ external monitor.
 - Saved hosts with groups, plus quick connect (`user@host:port`)
 - Password, keyboard-interactive and key authentication
 - Generate Ed25519, ECDSA or RSA keys, or import OpenSSH, PEM and PuTTY (`.ppk`) keys
-- Copy or share a public key to add it to a server
+- Install a key on a server in one tap over your password login, or copy or share its public key
 
 **Snippets**
 - Save commands you run often and send them to the terminal in two taps
