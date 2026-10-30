@@ -55,16 +55,15 @@ import kotlinx.coroutines.launch
 import app.shellscout.session.SessionTab
 import app.shellscout.ssh.EditableFile
 import app.shellscout.ssh.RemoteChangedException
-import app.shellscout.ssh.RemoteFs
 import app.shellscout.ui.common.LocalContainer
 
-/** ED-01..ED-06: edit a remote text file in place over SFTP. */
+/** ED-01..ED-06: edit a remote text file in place over SFTP or FTP. */
 @Composable
 fun EditorPane(tab: SessionTab, path: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val container = LocalContainer.current
     val scope = rememberCoroutineScope()
     val conn by tab.connectionFlow.collectAsState()
-    val fs = remember(conn) { RemoteFs(conn) }
+    val fs = remember(conn) { conn.fs() }
 
     var file by remember(path) { mutableStateOf<EditableFile?>(null) }
     var value by remember(path) { mutableStateOf(TextFieldValue("")) }

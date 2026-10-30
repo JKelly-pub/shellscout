@@ -23,6 +23,7 @@ Modified files say so in their header.
 | --- | --- | --- |
 | com.hierynomus:sshj | 0.41.2 | Apache-2.0 |
 | com.hierynomus:asn-one (via sshj) | 0.6.0 | Apache-2.0 |
+| commons-net:commons-net (Apache Commons Net, used for FTP and FTPS) | 3.13.0 | Apache-2.0 |
 | org.bouncycastle:bcprov-jdk18on / bcpkix-jdk18on / bcutil-jdk18on | 1.85 | Bouncy Castle Licence (MIT-style) |
 | org.slf4j:slf4j-api / slf4j-nop | 2.0.17 / 2.0.16 | MIT |
 | AndroidX (Compose, Material 3, Room, Lifecycle, Activity, Fragment, Biometric, DocumentFile, Core and their dependencies) | see `gradle/libs.versions.toml` | Apache-2.0 |
@@ -30,6 +31,12 @@ Modified files say so in their header.
 | org.jetbrains:annotations | 23.0.0 | Apache-2.0 |
 | org.jspecify:jspecify | 1.0.0 | Apache-2.0 |
 | com.google.guava:listenablefuture | 1.0 | Apache-2.0 |
+
+Apache Commons Net
+Copyright 2001-2026 The Apache Software Foundation
+
+This product includes software developed at The Apache Software Foundation
+(https://www.apache.org/).
 
 Regenerate the full list, including transitive dependencies, with
 `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`.

@@ -59,19 +59,19 @@ data class ExecResult(val exitStatus: Int?, val output: String)
  * subsystem, so the user authenticates once. All methods block on network I/O and must be called
  * off the main thread (they switch to [Dispatchers.IO] themselves).
  */
-class SshConnection(val host: HostEntity, private val deps: SshDeps) {
+class SshConnection(override val host: HostEntity, private val deps: SshDeps) : RemoteConnection {
 
     private val _state = MutableStateFlow<ConnState>(ConnState.Connecting)
-    val state: StateFlow<ConnState> = _state.asStateFlow()
+    override val state: StateFlow<ConnState> = _state.asStateFlow()
 
     private val client = SSHClient(AlgorithmPolicy.config(host.allowLegacyAlgorithms))
     private val sftpLock = Mutex()
     private var sftpClient: SFTPClient? = null
     private var shellSession: Session? = null
 
-    val isConnected: Boolean get() = client.isConnected && client.isAuthenticated
+    override val isConnected: Boolean get() = client.isConnected && client.isAuthenticated
 
-    suspend fun connect(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun connect(): Unit = withContext(Dispatchers.IO) {
         _state.value = ConnState.Connecting
         try {
             client.addHostKeyVerifier(TofuHostKeyVerifier(deps.knownHostDao, deps.prompts))
@@ -203,12 +203,14 @@ class SshConnection(val host: HostEntity, private val deps: SshDeps) {
         }
     }
 
+    override fun fs(): SftpFs = SftpFs(this)
+
     /** SE-03: the SFTP subsystem on the same authenticated connection. */
     suspend fun sftp(): SFTPClient = sftpLock.withLock {
         sftpClient ?: withContext(Dispatchers.IO) { client.newSFTPClient() }.also { sftpClient = it }
     }
 
-    suspend fun disconnect(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun disconnect(): Unit = withContext(Dispatchers.IO) {
         runCatching { sftpClient?.close() }
         runCatching { shellSession?.close() }
         runCatching { client.disconnect() }

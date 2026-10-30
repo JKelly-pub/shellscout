@@ -19,9 +19,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.shellscout.data.HostEntity
+import app.shellscout.data.Protocol
+import app.shellscout.ftp.FtpConnection
 import app.shellscout.settings.AppSettings
 import app.shellscout.ssh.ConnState
 import app.shellscout.ssh.RemoteClipboard
+import app.shellscout.ssh.RemoteConnection
 import app.shellscout.ssh.RemoteFs
 import app.shellscout.ssh.SshConnection
 import app.shellscout.ssh.SshDeps
@@ -35,19 +38,20 @@ enum class SessionView { TERMINAL, FILES, SPLIT }
  * One tab (SE-01). The terminal session is replaced on reconnect, so the UI observes [terminal].
  * [connection] is likewise replaced; observe [connectionFlow] for state.
  */
-class SessionTab(val id: String, val host: HostEntity, connection: SshConnection) {
+class SessionTab(val id: String, val host: HostEntity, connection: RemoteConnection) {
     val connectionFlow = MutableStateFlow(connection)
-    val connection: SshConnection get() = connectionFlow.value
+    val connection: RemoteConnection get() = connectionFlow.value
     val terminal = MutableStateFlow<TerminalSession?>(null)
     val title = MutableStateFlow(host.name)
-    val view = MutableStateFlow(SessionView.TERMINAL)
-    /** Last directory shown in the SFTP browser, kept across view switches. */
+    // FTP has no terminal, so its tabs only ever show files.
+    val view = MutableStateFlow(if (host.protocol.hasTerminal) SessionView.TERMINAL else SessionView.FILES)
+    /** Last directory shown in the file browser, kept across view switches. */
     val remoteDir = MutableStateFlow<String?>(null)
-    /** Files cut or copied in the SFTP browser, kept while the user moves to the folder to paste into (FT-10). */
+    /** Files cut or copied in the file browser, kept while the user moves to the folder to paste into (FT-10). */
     val fileClipboard = MutableStateFlow<RemoteClipboard?>(null)
     /** Remote file open in the editor for this tab, if any (ED-01). */
     val editorPath = MutableStateFlow<String?>(null)
-    val fs: RemoteFs get() = RemoteFs(connection)
+    val fs: RemoteFs get() = connection.fs()
 }
 
 /**
@@ -75,7 +79,7 @@ class SessionManager(
 
     private var clipboardClearJob: Job? = null
 
-    fun connectionForHost(hostId: Long): SshConnection? =
+    fun connectionForHost(hostId: Long): RemoteConnection? =
         _tabs.value.firstOrNull { it.host.id == hostId && it.connection.isConnected }?.connection
 
     fun select(tabId: String) {
@@ -91,7 +95,7 @@ class SessionManager(
 
     /** Opens a new tab and connects. Several tabs may target the same host (SE-01). */
     fun open(host: HostEntity): SessionTab {
-        val tab = SessionTab(UUID.randomUUID().toString(), host, SshConnection(host, deps))
+        val tab = SessionTab(UUID.randomUUID().toString(), host, newConnection(host))
         _tabs.update { it + tab }
         _activeTabId.value = tab.id
         connect(tab)
@@ -102,19 +106,26 @@ class SessionManager(
         val old = tab.connection
         scope.launch { old.disconnect() }
         tab.terminal.value?.finishIfRunning()
-        tab.connectionFlow.value = SshConnection(tab.host, deps)
+        tab.connectionFlow.value = newConnection(tab.host)
         connect(tab)
     }
+
+    private fun newConnection(host: HostEntity): RemoteConnection =
+        if (host.protocol == Protocol.SSH) SshConnection(host, deps) else FtpConnection(host, deps)
 
     private fun connect(tab: SessionTab) {
         tab.terminal.value = null
         scope.launch {
             try {
-                tab.connection.connect()
-                val transport = SshTerminalTransport(tab.connection, scope, tab.host.startDirectory)
+                val connection = tab.connection
+                connection.connect()
+                if (connection !is SshConnection) return@launch
+                val transport = SshTerminalTransport(connection, scope, tab.host.startDirectory)
                 tab.terminal.value = TerminalSession(transport, settings.current.scrollbackLines, sessionClient(tab))
             } catch (e: Exception) {
-                post("${tab.host.name}: ${SshConnection.describe(e)}")
+                // Each connection type words its own failures (FTP replies, TLS trust) in its state.
+                val reason = (tab.connection.state.value as? ConnState.Disconnected)?.reason ?: SshConnection.describe(e)
+                post("${tab.host.name}: $reason")
             }
         }
     }

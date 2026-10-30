@@ -92,4 +92,5 @@ dependencies {
     implementation(libs.bouncycastle.prov)
     implementation(libs.bouncycastle.pkix)
     implementation(libs.slf4j.nop)
+    implementation(libs.commons.net)
 }

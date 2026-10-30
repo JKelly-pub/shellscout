@@ -18,6 +18,7 @@ annotation = "1.9.1"
 sshj = "0.41.2"
 bouncycastle = "1.85"
 slf4j = "2.0.16"
+commonsNet = "3.13.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -44,6 +45,7 @@ sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+commons-net = { module = "commons-net:commons-net", version.ref = "commonsNet" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

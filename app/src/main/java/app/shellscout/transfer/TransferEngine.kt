@@ -21,8 +21,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import net.schmizz.sshj.sftp.FileMode
-import net.schmizz.sshj.sftp.OpenMode
 import app.shellscout.data.TransferDao
 import app.shellscout.data.TransferDirection
 import app.shellscout.data.TransferEntity
@@ -31,12 +29,12 @@ import app.shellscout.ssh.ConflictAnswer
 import app.shellscout.ssh.ConflictChoice
 import app.shellscout.ssh.Prompt
 import app.shellscout.ssh.PromptBroker
+import app.shellscout.ssh.RemoteConnection
 import app.shellscout.ssh.RemoteEntry
 import app.shellscout.ssh.RemoteFs
 import app.shellscout.ssh.SshConnection
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.EnumSet
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -47,7 +45,7 @@ data class LiveProgress(val doneBytes: Long, val totalBytes: Long, val bytesPerS
 }
 
 /**
- * FT-03..FT-08: queued, resumable SFTP transfers. Directories are expanded into one queue entry per
+ * FT-03..FT-08: queued, resumable transfers over SFTP or FTP. Directories are expanded into one queue entry per
  * file when enqueued. Runs in the app scope, so transfers survive screen changes and continue while
  * the foreground service keeps the process alive (FT-06).
  */
@@ -57,12 +55,12 @@ class TransferEngine(
     private val prompts: PromptBroker,
     private val scope: CoroutineScope,
     /** Finds a live connection to the host, for retries. */
-    private val connectionForHost: (Long) -> SshConnection?,
+    private val connectionForHost: (Long) -> RemoteConnection?,
 ) {
     private val resolver: ContentResolver = context.contentResolver
     private val parallel = Semaphore(2)
     private val jobs = ConcurrentHashMap<Long, Job>()
-    private val connections = ConcurrentHashMap<Long, SshConnection>()
+    private val connections = ConcurrentHashMap<Long, RemoteConnection>()
     /** Per-batch "apply to all" conflict answers. */
     private val batchAnswers = ConcurrentHashMap<String, ConflictAnswer>()
     private val batchPromptLock = Mutex()
@@ -82,7 +80,7 @@ class TransferEngine(
     // ---------------------------------------------------------------- enqueue
 
     /** Upload local files (content:// documents) into [remoteDir]. */
-    fun uploadFiles(connection: SshConnection, uris: List<Uri>, remoteDir: String) = scope.launch {
+    fun uploadFiles(connection: RemoteConnection, uris: List<Uri>, remoteDir: String) = scope.launch {
         val batch = newBatch()
         for (uri in uris) {
             val name = displayName(uri) ?: uri.lastPathSegment ?: "upload"
@@ -94,9 +92,9 @@ class TransferEngine(
     }
 
     /** Upload a local SAF directory tree (or a single DocumentFile) into [remoteDir], recursively. */
-    fun uploadDocument(connection: SshConnection, doc: DocumentFile, remoteDir: String) = scope.launch {
+    fun uploadDocument(connection: RemoteConnection, doc: DocumentFile, remoteDir: String) = scope.launch {
         val batch = newBatch()
-        val fs = RemoteFs(connection)
+        val fs = connection.fs()
         suspend fun walk(d: DocumentFile, dest: String) {
             val name = d.name ?: "item"
             if (d.isDirectory) {
@@ -114,9 +112,9 @@ class TransferEngine(
     }
 
     /** Download a remote file or directory (recursively) into a local SAF directory tree. */
-    fun download(connection: SshConnection, entries: List<RemoteEntry>, localDir: DocumentFile) = scope.launch {
+    fun download(connection: RemoteConnection, entries: List<RemoteEntry>, localDir: DocumentFile) = scope.launch {
         val batch = newBatch()
-        val fs = RemoteFs(connection)
+        val fs = connection.fs()
         suspend fun walk(e: RemoteEntry, dir: DocumentFile) {
             if (e.isDirectory && !e.isSymlink) {
                 val sub = dir.findFile(e.name)?.takeIf { it.isDirectory } ?: dir.createDirectory(e.name) ?: return
@@ -153,12 +151,12 @@ class TransferEngine(
 
     private fun newBatch() = java.util.UUID.randomUUID().toString()
 
-    private suspend fun enqueue(connection: SshConnection, batch: String, t: TransferEntity) {
+    private suspend fun enqueue(connection: RemoteConnection, batch: String, t: TransferEntity) {
         val id = dao.insert(t)
         start(connection, t.copy(id = id), batch, resumeByDefault = false)
     }
 
-    private suspend fun start(connection: SshConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
+    private suspend fun start(connection: RemoteConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
         dao.update(t)
         connections[t.id] = connection
         jobs[t.id] = scope.launch(Dispatchers.IO) {
@@ -184,15 +182,15 @@ class TransferEngine(
         }
     }
 
-    private suspend fun upload(conn: SshConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
-        val sftp = conn.sftp()
+    private suspend fun upload(conn: RemoteConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
+        val fs = conn.fs()
         val uri = Uri.parse(t.localUri)
         val total = if (t.totalBytes >= 0) t.totalBytes else size(uri)
         var remotePath = t.remotePath
         var offset = 0L
 
-        val existing = sftp.statExistence(remotePath)
-        if (existing != null && existing.type != FileMode.Type.DIRECTORY) {
+        val existing = fs.stat(remotePath)
+        if (existing != null && !existing.isDirectory) {
             val canResume = existing.size in 1 until total
             val choice = if (resumeByDefault && canResume) ConflictChoice.RESUME
             else conflict(batch, t.displayName, existing.size, total, canResume)
@@ -205,26 +203,22 @@ class TransferEngine(
             }
         }
 
-        val modes = if (offset > 0) EnumSet.of(OpenMode.WRITE)
-        else EnumSet.of(OpenMode.WRITE, OpenMode.CREAT, OpenMode.TRUNC)
         val input = resolver.openInputStream(uri) ?: error("Cannot open local file")
         input.use { ins ->
             skipFully(ins, offset)
-            sftp.open(remotePath, modes).use { rf ->
-                rf.RemoteFileOutputStream(offset, 16).use { out ->
-                    copy(t.id, ins, out, offset, total)
-                }
+            fs.openWrite(remotePath, offset).use { out ->
+                copy(t.id, ins, out, offset, total)
             }
         }
         finish(t.id, TransferStatus.DONE, null)
     }
 
-    private suspend fun download(conn: SshConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
-        val sftp = conn.sftp()
+    private suspend fun download(conn: RemoteConnection, t: TransferEntity, batch: String, resumeByDefault: Boolean) {
+        val fs = conn.fs()
         val dir = DocumentFile.fromTreeUri(context, Uri.parse(t.localUri))
             ?: DocumentFile.fromSingleUri(context, Uri.parse(t.localUri))
             ?: error("Local folder is no longer available")
-        val total = sftp.stat(t.remotePath).size
+        val total = fs.stat(t.remotePath)?.size ?: error("${t.displayName} is no longer on the server")
         var target = dir.findFile(t.displayName)
         var offset = 0L
         var mode = "wt"
@@ -247,10 +241,8 @@ class TransferEngine(
 
         val output = resolver.openOutputStream(file.uri, mode) ?: error("Cannot write local file")
         output.use { out ->
-            sftp.open(t.remotePath, EnumSet.of(OpenMode.READ)).use { rf ->
-                rf.ReadAheadRemoteFileInputStream(16, offset).use { ins ->
-                    copy(t.id, ins, out, offset, total)
-                }
+            fs.openRead(t.remotePath, offset).use { ins ->
+                copy(t.id, ins, out, offset, total)
             }
         }
         finish(t.id, TransferStatus.DONE, null)
@@ -283,6 +275,8 @@ class TransferEngine(
         }
         output.flush()
         dao.progress(id, done, total)
+        // A connection that drops can look like the end of the file; don't report a short copy as done.
+        if (total >= 0 && done < total) error("Transfer stopped early ($done of $total bytes)")
     }
 
     private suspend fun finish(id: Long, status: TransferStatus, error: String?) {
@@ -300,8 +294,8 @@ class TransferEngine(
             answer.choice
         }
 
-    private suspend fun uniqueRemoteName(conn: SshConnection, path: String): String {
-        val fs = RemoteFs(conn)
+    private suspend fun uniqueRemoteName(conn: RemoteConnection, path: String): String {
+        val fs = conn.fs()
         val dir = RemoteFs.parent(path)
         val name = path.substringAfterLast('/')
         var i = 1

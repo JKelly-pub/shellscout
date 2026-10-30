@@ -3,6 +3,20 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
+## Unreleased
+
+### New: FTP and FTPS
+- Hosts can now use **FTP** or **FTPS** (FTP over TLS, explicit `AUTH TLS`) as well as SSH. Choose
+  the protocol when you edit a host, or quick connect with `ftp://user@host` or `ftps://user@host`.
+- FTP tabs open straight to the file browser: browse, upload, download with resume, rename, move,
+  delete, change permissions (where the server allows `SITE CHMOD`) and edit text files. Copy and
+  extract need a shell on the server, so they stay SSH-only.
+- FTPS protects both the login and the files. A certificate Android trusts is accepted silently;
+  a self-signed one is shown with its SHA-256 fingerprint to check once, and a changed certificate
+  gets the same warning as a changed SSH host key.
+- Plain FTP hosts are marked with a warning, since the password and files are sent unencrypted.
+- Disconnected tabs now offer Reconnect in the file browser too.
+
 ## 0.6.0 (2026-10-26)
 
 ### New: install a key on a server

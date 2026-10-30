@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.shellscout.data.AuthMethod
 import app.shellscout.data.KeyEntity
-import app.shellscout.ssh.RemoteFs
+import app.shellscout.ssh.SshConnection
 import app.shellscout.security.GeneratedKeyType
 import app.shellscout.security.PassphraseRequiredException
 import app.shellscout.ui.common.LocalContainer
@@ -159,8 +159,8 @@ private fun InstallKeyDialog(key: KeyEntity, onDismiss: () -> Unit) {
     val container = LocalContainer.current
     val scope = rememberCoroutineScope()
     val tabs by container.sessions.tabs.collectAsState()
-    // One entry per host: two tabs on the same server would install to the same account.
-    val live = tabs.filter { container.sessions.isLive(it) }.distinctBy { it.host.id }
+    // One entry per host: two tabs on the same server would install to the same account. FTP tabs have no shell to do it with.
+    val live = tabs.filter { it.connection is SshConnection && container.sessions.isLive(it) }.distinctBy { it.host.id }
     var chosen by remember { mutableStateOf(live.firstOrNull()?.id) }
     var useKey by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
@@ -201,7 +201,7 @@ private fun InstallKeyDialog(key: KeyEntity, onDismiss: () -> Unit) {
                     busy = true
                     scope.launch {
                         try {
-                            val added = RemoteFs(tab.connection).authorizeKey(key.publicKeyOpenSsh)
+                            val added = (tab.connection as SshConnection).fs().authorizeKey(key.publicKeyOpenSsh)
                             if (useKey) {
                                 container.db.hosts().get(tab.host.id)?.let { h ->
                                     container.db.hosts().update(h.copy(authMethod = AuthMethod.KEY, keyId = key.id))

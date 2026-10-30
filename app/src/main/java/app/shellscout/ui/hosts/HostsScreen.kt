@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import app.shellscout.data.AuthMethod
 import app.shellscout.data.HostEntity
+import app.shellscout.data.Protocol
 import app.shellscout.ui.common.FormFactor
 import app.shellscout.ui.common.LocalContainer
 import app.shellscout.ui.common.isExtraWideWidth
@@ -213,12 +214,14 @@ private fun HostRow(
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${host.username}@${host.hostname}" + if (host.port != 22) ":${host.port}" else "",
+                    (if (host.protocol == Protocol.SSH) "" else host.protocol.name.lowercase() + "://") +
+                        "${host.username}@${host.hostname}" + if (host.port != host.protocol.defaultPort) ":${host.port}" else "",
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
-                if (host.allowLegacyAlgorithms) {
+                if (host.allowLegacyAlgorithms || host.protocol == Protocol.FTP) {
                     Icon(
-                        Icons.Default.Warning, contentDescription = "Legacy algorithms enabled",
+                        Icons.Default.Warning,
+                        contentDescription = if (host.protocol == Protocol.FTP) "Unencrypted FTP" else "Legacy algorithms enabled",
                         tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 6.dp),
                     )
                 }
@@ -241,14 +244,14 @@ private fun HostRow(
     )
 }
 
-/** HM-04: `user@host[:port]` without saving a profile. */
+/** HM-04: `user@host[:port]` without saving a profile; `ftp://` or `ftps://` in front for FTP. */
 @Composable
 private fun QuickConnect(onConnect: (HostEntity) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     fun go() {
         val parsed = parseQuickConnect(text)
-        if (parsed == null) error = "Use user@host or user@host:port" else { error = null; onConnect(parsed) }
+        if (parsed == null) error = "Use user@host, user@host:port or ftp://user@host" else { error = null; onConnect(parsed) }
     }
     val currentError = error
     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -273,12 +276,13 @@ private fun QuickConnect(onConnect: (HostEntity) -> Unit) {
 }
 
 fun parseQuickConnect(input: String): HostEntity? {
-    val m = Regex("^([^@\\s]+)@([^:\\s]+|\\[[0-9a-fA-F:]+])(?::(\\d{1,5}))?$").find(input.trim()) ?: return null
-    val (user, hostRaw, portRaw) = m.destructured
-    val port = portRaw.toIntOrNull() ?: 22
+    val m = Regex("^(?:(ssh|ftp|ftps)://)?([^@\\s]+)@([^:\\s]+|\\[[0-9a-fA-F:]+])(?::(\\d{1,5}))?$", RegexOption.IGNORE_CASE).find(input.trim()) ?: return null
+    val (scheme, user, hostRaw, portRaw) = m.destructured
+    val protocol = Protocol.entries.firstOrNull { it.name.equals(scheme, ignoreCase = true) } ?: Protocol.SSH
+    val port = portRaw.toIntOrNull() ?: protocol.defaultPort
     if (port !in 1..65535) return null
     val host = hostRaw.removePrefix("[").removeSuffix("]")
-    return HostEntity(name = "$user@$host", hostname = host, port = port, username = user)
+    return HostEntity(name = "$user@$host", hostname = host, port = port, username = user, protocol = protocol)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -302,13 +306,38 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
     var termType by remember(initial.id) { mutableStateOf(initial.termType) }
     var startDir by remember(initial.id) { mutableStateOf(initial.startDirectory.orEmpty()) }
     var legacy by remember(initial.id) { mutableStateOf(initial.allowLegacyAlgorithms) }
+    var protocol by remember(initial.id) { mutableStateOf(initial.protocol) }
+    val isSsh = protocol == Protocol.SSH
+    // FTP signs in with a password only.
+    val effectiveAuth = if (isSsh) auth else AuthMethod.PASSWORD
 
     val portNum = port.toIntOrNull()
     val valid = hostname.isNotBlank() && username.isNotBlank() && portNum != null && portNum in 1..65535 &&
-        (auth == AuthMethod.PASSWORD || keyId != null)
+        (effectiveAuth == AuthMethod.PASSWORD || keyId != null)
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Protocol.entries.forEach { p ->
+                RadioButton(selected = protocol == p, onClick = {
+                    // Follow the protocol's usual port unless the user has set their own.
+                    if (port == protocol.defaultPort.toString()) port = p.defaultPort.toString()
+                    protocol = p
+                })
+                Text(p.name, modifier = Modifier.padding(end = 8.dp))
+            }
+        }
+        when (protocol) {
+            Protocol.SSH -> {}
+            Protocol.FTP -> Text(
+                "Plain FTP sends your password and files unencrypted. Use FTPS if the server supports it. FTP gives file access only, without a terminal.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+            )
+            Protocol.FTPS -> Text(
+                "FTP over TLS (explicit, AUTH TLS). File access only, without a terminal.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 hostname, { hostname = it.trim() }, label = { Text("Host or IP") }, singleLine = true,
@@ -336,11 +365,13 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
         }
 
         Text("Authentication", style = MaterialTheme.typography.titleSmall)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = auth == AuthMethod.PASSWORD, onClick = { auth = AuthMethod.PASSWORD }); Text("Password")
-            RadioButton(selected = auth == AuthMethod.KEY, onClick = { auth = AuthMethod.KEY }); Text("SSH key")
+        if (isSsh) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = auth == AuthMethod.PASSWORD, onClick = { auth = AuthMethod.PASSWORD }); Text("Password")
+                RadioButton(selected = auth == AuthMethod.KEY, onClick = { auth = AuthMethod.KEY }); Text("SSH key")
+            }
         }
-        if (auth == AuthMethod.PASSWORD) {
+        if (effectiveAuth == AuthMethod.PASSWORD) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = savePassword, onCheckedChange = { savePassword = it })
                 Text("  Save password on this device", modifier = Modifier.weight(1f))
@@ -379,9 +410,9 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
             label = { Text("Keep-alive interval, seconds (blank = app default)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(termType, { termType = it.trim() }, label = { Text("Terminal type") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(startDir, { startDir = it }, label = { Text("Start directory (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (isSsh) OutlinedTextField(termType, { termType = it.trim() }, label = { Text("Terminal type") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (isSsh) OutlinedTextField(startDir, { startDir = it }, label = { Text("Start directory (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (isSsh) Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = legacy, onCheckedChange = { legacy = it })
             Column(Modifier.padding(start = 12.dp)) {
                 Text("Allow legacy algorithms")
@@ -397,18 +428,19 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
             Button(enabled = valid, onClick = {
                 scope.launch {
                     val encrypted = when {
-                        auth != AuthMethod.PASSWORD || !savePassword -> null
+                        effectiveAuth != AuthMethod.PASSWORD || !savePassword -> null
                         newPassword.isNotEmpty() -> container.vault.encryptString(newPassword)
                         else -> initial.encryptedPassword
                     }
                     val updated = initial.copy(
                         name = name.ifBlank { "$username@$hostname" },
                         hostname = hostname, port = portNum ?: 22, username = username, groupName = group.trim(),
-                        authMethod = auth, keyId = if (auth == AuthMethod.KEY) keyId else null,
+                        authMethod = effectiveAuth, keyId = if (effectiveAuth == AuthMethod.KEY) keyId else null,
                         savePassword = encrypted != null, encryptedPassword = encrypted,
                         keepAliveSeconds = keepAlive.toIntOrNull()?.takeIf { it > 0 },
                         termType = termType.ifBlank { "xterm-256color" },
-                        startDirectory = startDir.ifBlank { null }, allowLegacyAlgorithms = legacy,
+                        startDirectory = startDir.ifBlank { null }, allowLegacyAlgorithms = legacy && isSsh,
+                        protocol = protocol,
                     )
                     if (updated.id == 0L) container.db.hosts().insert(updated) else container.db.hosts().update(updated)
                     onDone()

@@ -153,7 +153,17 @@ fun FileBrowser(tab: SessionTab, formFactor: FormFactor, onEdit: (RemoteEntry) -
 
     if (state != ConnState.Connected) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(if (state is ConnState.Disconnected) "Not connected" else "Connectingâ€¦")
+            val s = state
+            if (s is ConnState.Disconnected) {
+                // An FTP tab has no terminal, and so no terminal banner to reconnect from.
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                    Text("Not connected")
+                    s.reason?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TextButton(onClick = { container.sessions.reconnect(tab) }) { Text("Reconnect") }
+                }
+            } else {
+                Text("Connecting…")
+            }
         }
         return
     }
@@ -276,7 +286,7 @@ private fun RemotePane(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val conn by tab.connectionFlow.collectAsState()
-    val fs = remember(conn) { RemoteFs(conn) }
+    val fs = remember(conn) { conn.fs() }
     val dir by tab.remoteDir.collectAsState()
     var entries by remember { mutableStateOf<List<RemoteEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -354,7 +364,7 @@ private fun RemotePane(
     fun paste() {
         val clip = clipboard ?: return
         val d = dir ?: return
-        container.sessions.post(if (clip.cut) "Movingâ€¦" else "Copyingâ€¦")
+        container.sessions.post(if (clip.cut) "Moving…" else "Copying…")
         perform {
             // A failed move may have moved some items already, so the cut list is spent either way.
             val n = try { fs.paste(clip.entries, d, move = clip.cut) } finally { if (clip.cut) tab.fileClipboard.value = null }
@@ -375,7 +385,7 @@ private fun RemotePane(
         if (ev.type != KeyEventType.KeyDown) false else when {
             ev.isCtrlPressed && ev.key == Key.A -> { selectAll(); true }
             ev.isCtrlPressed && ev.key == Key.X && any -> { putOnClipboard(cut = true); true }
-            ev.isCtrlPressed && ev.key == Key.C && any -> { putOnClipboard(cut = false); true }
+            ev.isCtrlPressed && ev.key == Key.C && any && fs.canCopy -> { putOnClipboard(cut = false); true }
             ev.isCtrlPressed && ev.key == Key.V && clipboard != null -> { paste(); true }
             ev.key == Key.Delete && any -> { dialog = RemoteDialog.Delete(selectedEntries); true }
             ev.key == Key.Escape && selecting -> { endSelection(); true }
@@ -403,7 +413,7 @@ private fun RemotePane(
             },
     ) {
         PaneHeader(
-            title = dir ?: "â€¦",
+            title = dir ?: "…",
             canGoUp = dir != null && dir != "/",
             onUp = { dir?.let { tab.remoteDir.value = RemoteFs.parent(it) } },
         ) {
@@ -415,7 +425,8 @@ private fun RemotePane(
                     Icon(Icons.Default.SelectAll, if (allSelected) "Select none" else "Select all")
                 }
                 IconButton(onClick = { putOnClipboard(cut = true) }, enabled = any) { Icon(Icons.Default.ContentCut, "Cut") }
-                IconButton(onClick = { putOnClipboard(cut = false) }, enabled = any) { Icon(Icons.Default.ContentCopy, "Copy") }
+                // FTP can move on the server but not copy.
+                if (fs.canCopy) IconButton(onClick = { putOnClipboard(cut = false) }, enabled = any) { Icon(Icons.Default.ContentCopy, "Copy") }
                 IconButton(onClick = { onDownload(selectedEntries); endSelection() }, enabled = any) { Icon(Icons.Default.CloudDownload, "Download") }
                 IconButton(onClick = { dialog = RemoteDialog.Delete(selectedEntries) }, enabled = any) { Icon(Icons.Default.Delete, "Delete") }
             } else {
@@ -468,8 +479,8 @@ private fun RemotePane(
                     name = e.name,
                     isDirectory = e.isDirectory,
                     isLink = e.isSymlink,
-                    detail = (if (e.isDirectory) "" else formatBytes(e.size) + " Â· ") +
-                        RemoteFs.permissionString(e.permissions, e.isDirectory) + " Â· " + formatEpochSeconds(e.mtime),
+                    detail = (if (e.isDirectory) "" else formatBytes(e.size) + " · ") +
+                        (if (e.permissions < 0) "" else RemoteFs.permissionString(e.permissions, e.isDirectory) + " · ") + formatEpochSeconds(e.mtime),
                     onClick = {
                         when {
                             clickMods.ctrl -> toggle(e)
@@ -492,7 +503,7 @@ private fun RemotePane(
                 ) { close ->
                     if (!e.isDirectory) DropdownMenuItem(text = { Text("Edit") }, onClick = { close(); onEdit(e) })
                     DropdownMenuItem(text = { Text("Download") }, leadingIcon = { Icon(Icons.Default.CloudDownload, null) }, onClick = { close(); onDownload(listOf(e)) })
-                    if (!e.isDirectory) DropdownMenuItem(text = { Text("Open with / shareâ€¦") }, onClick = {
+                    if (!e.isDirectory) DropdownMenuItem(text = { Text("Open with / share…") }, onClick = {
                         close()
                         scope.launch {
                             try {
@@ -506,9 +517,9 @@ private fun RemotePane(
                             }
                         }
                     })
-                    if (!e.isDirectory && RemoteFs.archiveBaseName(e.name) != null) DropdownMenuItem(text = { Text("Extract here") }, onClick = {
+                    if (!e.isDirectory && fs.canExtract && RemoteFs.archiveBaseName(e.name) != null) DropdownMenuItem(text = { Text("Extract here") }, onClick = {
                         close()
-                        container.sessions.post("Extracting ${e.name}â€¦")
+                        container.sessions.post("Extracting ${e.name}…")
                         perform { container.sessions.post("Extracted to ${fs.extract(e).substringAfterLast('/')}") }
                     })
                     DropdownMenuItem(text = { Text("Rename") }, onClick = { close(); dialog = RemoteDialog.Rename(e) })
@@ -533,7 +544,10 @@ private fun RemotePane(
         }
         is RemoteDialog.Chmod -> TextInputDialog(
             "Permissions", "Octal, e.g. 644 or 755",
-            Integer.toOctalString(d.entry.permissions and 0xFFF).padStart(3, '0'), onDismiss = { dialog = null },
+            // Unknown permissions (some FTP listings) start from the usual defaults.
+            if (d.entry.permissions < 0) (if (d.entry.isDirectory) "755" else "644")
+            else Integer.toOctalString(d.entry.permissions and 0xFFF).padStart(3, '0'),
+            onDismiss = { dialog = null },
             validate = { it.matches(Regex("[0-7]{3,4}")) },
         ) { octal ->
             dialog = null; perform { fs.chmod(d.entry.path, octal.toInt(8)) }
@@ -646,14 +660,14 @@ private fun LocalPane(
                     name = doc.name ?: "?",
                     isDirectory = doc.isDirectory,
                     isLink = false,
-                    detail = if (doc.isDirectory) "" else formatBytes(doc.length()) + " Â· " + formatEpochSeconds(doc.lastModified() / 1000),
+                    detail = if (doc.isDirectory) "" else formatBytes(doc.length()) + " · " + formatEpochSeconds(doc.lastModified() / 1000),
                     onClick = { if (doc.isDirectory) { stack.add(dir); onNavigate(doc) } },
                     modifier = Modifier
                         .onGloballyPositioned { itemOrigin = it.positionInRoot() }
                         .draggableItem(drag, { DragPayload.Local(doc) }, { itemOrigin }),
                 ) { close ->
                     DropdownMenuItem(text = { Text("Upload") }, leadingIcon = { Icon(Icons.Default.CloudUpload, null) }, onClick = { close(); onUpload(listOf(doc)) })
-                    if (!doc.isDirectory) DropdownMenuItem(text = { Text("Open withâ€¦") }, onClick = {
+                    if (!doc.isDirectory) DropdownMenuItem(text = { Text("Open with…") }, onClick = {
                         close()
                         val view = Intent(Intent.ACTION_VIEW).setDataAndType(doc.uri, doc.type ?: "*/*")
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -770,7 +784,7 @@ private fun SortMenu(current: SortBy, onChange: (SortBy) -> Unit) {
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             SortBy.entries.forEach { s ->
                 DropdownMenuItem(
-                    text = { Text(s.name.lowercase().replaceFirstChar { it.uppercase() } + if (s == current) "  âœ“" else "") },
+                    text = { Text(s.name.lowercase().replaceFirstChar { it.uppercase() } + if (s == current) "  ✓" else "") },
                     onClick = { open = false; onChange(s) },
                 )
             }

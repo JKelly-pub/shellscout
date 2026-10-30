@@ -20,7 +20,9 @@ external monitor.
 - Disconnect banner with one-tap reconnect
 
 **Files**
-- Browse servers over SFTP and folders on your device side by side
+- Browse servers over SFTP, FTP or FTPS and folders on your device side by side
+- FTP and FTPS hosts get the file manager, editor and transfers, without a terminal. Copying and
+  extracting on the server need SSH, so FTP offers move but not copy or extract.
 - Upload and download files and whole folders, with a transfer queue and progress
 - Interrupted transfers resume where they stopped
 - Choose to overwrite, rename, skip or resume when a file already exists
@@ -33,7 +35,7 @@ external monitor.
 - Warns you if the file was changed on the server since you opened it
 
 **Hosts and keys**
-- Saved hosts with groups, plus quick connect (`user@host:port`)
+- Saved hosts with groups, plus quick connect (`user@host:port`, or `ftp://` / `ftps://user@host`)
 - Password, keyboard-interactive and key authentication
 - Generate Ed25519, ECDSA or RSA keys, or import OpenSSH, PEM and PuTTY (`.ppk`) keys
 - Install a key on a server in one tap over your password login, or copy or share its public key
@@ -55,6 +57,8 @@ external monitor.
 - Optional app lock with fingerprint, face or device PIN, offered when you first open the app
 - Host keys are checked on every connection. A changed key is blocked until you confirm the
   replacement.
+- FTPS certificates that Android trusts are accepted as they are; any other certificate is shown for
+  you to check once, like a host key. Plain FTP is unencrypted and marked as such.
 - Only modern SSH algorithms by default; older ones can be allowed per host when needed
 - Optional screenshot blocking and automatic clipboard clearing
 - No analytics, no ads, no cloud backup, and no network traffic except to your own servers

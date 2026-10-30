@@ -1,6 +1,7 @@
 package app.shellscout.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
@@ -123,12 +124,16 @@ class Converters {
     @TypeConverter fun stringToDir(v: String) = TransferDirection.valueOf(v)
     @TypeConverter fun statusToString(v: TransferStatus) = v.name
     @TypeConverter fun stringToStatus(v: String) = TransferStatus.valueOf(v)
+    @TypeConverter fun protocolToString(v: Protocol) = v.name
+    @TypeConverter fun stringToProtocol(v: String) = Protocol.valueOf(v)
 }
 
 @Database(
     entities = [HostEntity::class, KeyEntity::class, KnownHostEntity::class, SnippetEntity::class, TransferEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    // 2: hosts.protocol (SSH, FTP or FTPS); existing hosts are SSH.
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

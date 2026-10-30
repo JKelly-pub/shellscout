@@ -103,7 +103,7 @@ fun SettingsScreen(onOpenKeys: () -> Unit, onBack: (() -> Unit)? = null) {
                 }
             }
 
-            Section("Trusted host keys")
+            Section("Trusted host keys and certificates")
             if (knownHosts.isEmpty()) {
                 Text("None yet. Hosts are added when you first trust them.", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

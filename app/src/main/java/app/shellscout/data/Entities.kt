@@ -1,10 +1,23 @@
 package app.shellscout.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class AuthMethod { PASSWORD, KEY }
+
+/** How the app talks to a host. FTP and FTPS give file access only; there is no terminal. */
+enum class Protocol(val defaultPort: Int) {
+    SSH(22),
+    /** Plain FTP: the password and files cross the network unencrypted. */
+    FTP(21),
+    /** FTP with explicit TLS (AUTH TLS) on the usual FTP port. */
+    FTPS(21),
+    ;
+
+    val hasTerminal: Boolean get() = this == SSH
+}
 
 /** HM-01, HM-05: a saved host profile with per-host overrides. */
 @Entity(tableName = "hosts")
@@ -29,6 +42,8 @@ data class HostEntity(
     /** SC-05: legacy algorithms are opt-in per host and flagged in the UI. */
     val allowLegacyAlgorithms: Boolean = false,
     val lastConnectedAt: Long? = null,
+    @ColumnInfo(defaultValue = "SSH")
+    val protocol: Protocol = Protocol.SSH,
 )
 
 enum class KeyFormat {

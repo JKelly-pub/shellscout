@@ -9,3 +9,7 @@
 -dontwarn org.ietf.jgss.**
 -dontwarn javax.security.auth.login.**
 -dontwarn org.slf4j.**
+
+# Commons Net picks FTP listing parsers by name; keep them all.
+-keep class org.apache.commons.net.ftp.parser.** { *; }
+-dontwarn org.apache.commons.net.**

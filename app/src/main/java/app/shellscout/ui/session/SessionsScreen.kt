@@ -99,7 +99,7 @@ fun SessionsScreen(formFactor: FormFactor, onConnect: (HostEntity) -> Unit) {
             override fun closeTab() { active?.let { container.sessions.close(it) } }
             override fun nextTab(delta: Int) = container.sessions.selectNext(delta)
             override fun toggleFiles() {
-                active?.let { t ->
+                active?.takeIf { it.host.protocol.hasTerminal }?.let { t ->
                     t.view.value = when (t.view.value) {
                         SessionView.TERMINAL -> if (formFactor == FormFactor.TABLET) SessionView.SPLIT else SessionView.FILES
                         else -> SessionView.TERMINAL
@@ -107,6 +107,7 @@ fun SessionsScreen(formFactor: FormFactor, onConnect: (HostEntity) -> Unit) {
                 }
             }
             override fun openSnippets() {
+                if (active?.host?.protocol?.hasTerminal != true) return
                 if (formFactor == FormFactor.TABLET) snippetsPinned = !snippetsPinned else snippetsOpen = true
             }
         }
@@ -122,15 +123,17 @@ fun SessionsScreen(formFactor: FormFactor, onConnect: (HostEntity) -> Unit) {
                 // Labels only when the session area is wide enough to keep room for several tabs.
                 val labelToggle = maxWidth >= 1100.dp
                 Column(Modifier.fillMaxSize()) {
+                    // An FTP tab is files only: no view to switch and nothing to send snippets to.
+                    val hasTerminal = active.host.protocol.hasTerminal
                     TabStrip(tabs, active, onNew = { hostPicker = true }, trailing = {
-                        ViewToggle(active, formFactor, showLabels = labelToggle)
-                        IconToggleButton(checked = snippetsPinned, onCheckedChange = { snippetsPinned = it }) {
+                        if (hasTerminal) ViewToggle(active, formFactor, showLabels = labelToggle)
+                        if (hasTerminal) IconToggleButton(checked = snippetsPinned, onCheckedChange = { snippetsPinned = it }) {
                             Icon(if (snippetsPinned) Icons.Default.PushPin else Icons.AutoMirrored.Filled.ShortText, "Snippets panel")
                         }
                     })
                     Row(Modifier.weight(1f)) {
                         TabletContent(active, shortcuts, Modifier.weight(1f).fillMaxHeight())
-                        if (snippetsPinned) {
+                        if (snippetsPinned && hasTerminal) {
                             VerticalDivider()
                             SnippetPicker(active, onPicked = {}, modifier = Modifier.width(if (extraWide) 320.dp else 260.dp).fillMaxHeight())
                         }
@@ -239,8 +242,9 @@ private fun PhoneSession(
     val view by active.view.collectAsState()
     val editorPath by active.editorPath.collectAsState()
     Column(Modifier.fillMaxSize()) {
+        val hasTerminal = active.host.protocol.hasTerminal
         TabStrip(tabs, active, onNew = onNew, trailing = {
-            IconButton(onClick = onSnippets) { Icon(Icons.AutoMirrored.Filled.ShortText, "Snippets") }
+            if (hasTerminal) IconButton(onClick = onSnippets) { Icon(Icons.AutoMirrored.Filled.ShortText, "Snippets") }
         })
         val path = editorPath
         if (path != null) {
@@ -248,8 +252,8 @@ private fun PhoneSession(
             EditorPane(active, path, onClose = { active.editorPath.value = null }, modifier = Modifier.weight(1f))
             return@Column
         }
-        // UI-07: one pane at a time; split is offered on tablet only.
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        // UI-07: one pane at a time; split is offered on tablet only. FTP has files only.
+        if (hasTerminal) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
             SegmentedButton(view != SessionView.FILES, { active.view.value = SessionView.TERMINAL }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Terminal") }
             SegmentedButton(view == SessionView.FILES, { active.view.value = SessionView.FILES }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Files") }
         }
