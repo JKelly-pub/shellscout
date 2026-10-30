@@ -3,7 +3,7 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
-## Unreleased
+## 0.7.0 (2026-10-30)
 
 ### New: WireGuard
 - A new **WireGuard** tab. Import a config from a `.conf` file, by scanning its QR code, or by
