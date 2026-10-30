@@ -56,6 +56,11 @@ android {
                 "META-INF/*.kotlin_module",
             )
         }
+        jniLibs {
+            // wg and wg-quick (wireguard-tools, GPL-2.0) are only for the root backend. The app uses the
+            // userspace GoBackend, which needs libwg-go.so alone.
+            excludes += setOf("**/libwg.so", "**/libwg-quick.so")
+        }
     }
 }
 
@@ -93,4 +98,7 @@ dependencies {
     implementation(libs.bouncycastle.pkix)
     implementation(libs.slf4j.nop)
     implementation(libs.commons.net)
+    implementation(libs.wireguard.tunnel)
+    implementation(libs.zxing.embedded)
+    implementation(libs.zxing.core)
 }

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -218,6 +219,12 @@ private fun HostRow(
                         "${host.username}@${host.hostname}" + if (host.port != host.protocol.defaultPort) ":${host.port}" else "",
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
+                if (host.wgConfigId != null) {
+                    Icon(
+                        Icons.Default.VpnLock, contentDescription = "Connects through WireGuard",
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
                 if (host.allowLegacyAlgorithms || host.protocol == Protocol.FTP) {
                     Icon(
                         Icons.Default.Warning,
@@ -307,6 +314,8 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
     var startDir by remember(initial.id) { mutableStateOf(initial.startDirectory.orEmpty()) }
     var legacy by remember(initial.id) { mutableStateOf(initial.allowLegacyAlgorithms) }
     var protocol by remember(initial.id) { mutableStateOf(initial.protocol) }
+    val wgConfigs by container.wireguard.configs.collectAsState(initial = emptyList())
+    var wgId by remember(initial.id) { mutableStateOf(initial.wgConfigId) }
     val isSsh = protocol == Protocol.SSH
     // FTP signs in with a password only.
     val effectiveAuth = if (isSsh) auth else AuthMethod.PASSWORD
@@ -403,6 +412,31 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
             }
         }
 
+        // Brought up before connecting; managed on the WireGuard screen.
+        var wgMenu by remember { mutableStateOf(false) }
+        val wgName = wgConfigs.firstOrNull { it.id == wgId }?.name
+        ExposedDropdownMenuBox(expanded = wgMenu, onExpandedChange = { wgMenu = it }) {
+            OutlinedTextField(
+                value = wgName ?: "None",
+                onValueChange = {}, readOnly = true, label = { Text("WireGuard tunnel") },
+                supportingText = {
+                    Text(
+                        when {
+                            wgName != null -> "Starts when you connect to this host"
+                            wgConfigs.isEmpty() -> "Add a config on the WireGuard screen to use one here"
+                            else -> "Connect without a tunnel"
+                        },
+                    )
+                },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(wgMenu) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            )
+            ExposedDropdownMenu(expanded = wgMenu, onDismissRequest = { wgMenu = false }) {
+                DropdownMenuItem(text = { Text("None") }, onClick = { wgId = null; wgMenu = false })
+                wgConfigs.forEach { c -> DropdownMenuItem(text = { Text(c.name) }, onClick = { wgId = c.id; wgMenu = false }) }
+            }
+        }
+
         HorizontalDivider()
         Text("Advanced", style = MaterialTheme.typography.titleSmall)
         OutlinedTextField(
@@ -440,7 +474,7 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
                         keepAliveSeconds = keepAlive.toIntOrNull()?.takeIf { it > 0 },
                         termType = termType.ifBlank { "xterm-256color" },
                         startDirectory = startDir.ifBlank { null }, allowLegacyAlgorithms = legacy && isSsh,
-                        protocol = protocol,
+                        protocol = protocol, wgConfigId = wgId,
                     )
                     if (updated.id == 0L) container.db.hosts().insert(updated) else container.db.hosts().update(updated)
                     onDone()

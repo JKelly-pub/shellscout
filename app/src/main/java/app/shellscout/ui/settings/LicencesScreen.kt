@@ -35,6 +35,8 @@ enum class Licence(val title: String, val asset: String) {
     APACHE_2("Apache License 2.0", "licences/apache-2.0.txt"),
     BOUNCY_CASTLE("Bouncy Castle Licence", "licences/bouncy-castle.txt"),
     MIT_SLF4J("MIT License", "licences/mit-slf4j.txt"),
+    MIT_WIREGUARD_GO("MIT License", "licences/mit-wireguard-go.txt"),
+    BSD_3_GO("BSD 3-Clause License", "licences/bsd-3-go.txt"),
 }
 
 private data class Component(val name: String, val notice: String, val licence: Licence)
@@ -50,6 +52,10 @@ private val COMPONENTS = listOf(
     Component("sshj and asn-one", "Copyright (C) 2009 SSHJ Contributors", Licence.APACHE_2),
     Component("Bouncy Castle (bcprov, bcpkix, bcutil)", "Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.", Licence.BOUNCY_CASTLE),
     Component("Apache Commons Net", "Copyright 2001-2026 The Apache Software Foundation. This product includes software developed at The Apache Software Foundation (https://www.apache.org/).", Licence.APACHE_2),
+    Component("WireGuard Android tunnel library", "Copyright (C) 2017-2025 WireGuard LLC. All Rights Reserved.", Licence.APACHE_2),
+    Component("wireguard-go (in the WireGuard native library)", "Copyright (C) 2017-2025 WireGuard LLC. All Rights Reserved.", Licence.MIT_WIREGUARD_GO),
+    Component("Go standard library and golang.org/x (in the WireGuard native library)", "Copyright 2009 The Go Authors.", Licence.BSD_3_GO),
+    Component("ZXing and ZXing Android Embedded (QR code scanning)", "Copyright (C) 2008 ZXing authors; Copyright (C) 2012-2018 ZXing authors, Journey Mobile", Licence.APACHE_2),
     Component("SLF4J", "Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)", Licence.MIT_SLF4J),
     Component("AndroidX and Jetpack Compose", "The Android Open Source Project", Licence.APACHE_2),
     Component("Kotlin standard library and kotlinx.coroutines", "JetBrains and Kotlin contributors", Licence.APACHE_2),

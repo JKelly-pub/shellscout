@@ -21,6 +21,7 @@ import app.shellscout.settings.AppSettings
 import app.shellscout.ssh.PromptBroker
 import app.shellscout.ssh.SshDeps
 import app.shellscout.transfer.TransferEngine
+import app.shellscout.vpn.WireGuardManager
 import java.security.Security
 
 /** Manual dependency container; small enough not to need a DI framework. */
@@ -37,7 +38,8 @@ class AppContainer(app: Application) {
         knownHostDao = db.knownHosts(), prompts = prompts,
         defaultKeepAliveSeconds = { settings.current.keepAliveSeconds },
     )
-    val sessions = SessionManager(app, sshDeps, settings, scope)
+    val wireguard = WireGuardManager(app, db.wgConfigs(), db.hosts(), vault, prompts, scope)
+    val sessions = SessionManager(app, sshDeps, settings, wireguard, scope)
     val transfers = TransferEngine(app, db.transfers(), prompts, scope, sessions::connectionForHost)
 }
 
@@ -58,8 +60,8 @@ class ShellScoutApp : Application() {
 
         // SE-02: start the foreground service whenever there is something to keep alive.
         container.scope.launch {
-            kotlinx.coroutines.flow.combine(container.sessions.tabs, container.transfers.activeCount) { t, a ->
-                t.isNotEmpty() || a > 0
+            kotlinx.coroutines.flow.combine(container.sessions.tabs, container.transfers.activeCount, container.wireguard.active) { t, a, wg ->
+                t.isNotEmpty() || a > 0 || wg != null
             }.distinctUntilChanged().collect { busy ->
                 if (busy) launch(Dispatchers.Main) { SessionService.ensureRunning(this@ShellScoutApp) }
             }

@@ -36,6 +36,12 @@ sealed class Prompt<T> {
     class FileConflict(val name: String, val existingSize: Long, val incomingSize: Long, val canResume: Boolean) :
         Prompt<ConflictAnswer>()
 
+    /** Android's one-time consent before an app may run a VPN; [intent] is from VpnService.prepare. */
+    class VpnPermission(val intent: android.content.Intent) : Prompt<Boolean>()
+
+    /** Only one WireGuard tunnel can be up; switching drops whatever is using the current one. */
+    class SwitchTunnel(val from: String, val to: String, val sessionsUsing: Int) : Prompt<Boolean>()
+
     /** SN-04: fill in {{variables}} before sending a snippet. */
     class SnippetVariables(val snippetName: String, val variables: List<String>) : Prompt<Map<String, String>?>()
 }

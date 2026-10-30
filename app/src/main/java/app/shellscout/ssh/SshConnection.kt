@@ -210,11 +210,11 @@ class SshConnection(override val host: HostEntity, private val deps: SshDeps) : 
         sftpClient ?: withContext(Dispatchers.IO) { client.newSFTPClient() }.also { sftpClient = it }
     }
 
-    override suspend fun disconnect(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun disconnect(reason: String): Unit = withContext(Dispatchers.IO) {
         runCatching { sftpClient?.close() }
         runCatching { shellSession?.close() }
         runCatching { client.disconnect() }
-        if (_state.value !is ConnState.Disconnected) _state.value = ConnState.Disconnected("Disconnected")
+        if (_state.value !is ConnState.Disconnected) _state.value = ConnState.Disconnected(reason)
     }
 
     companion object {

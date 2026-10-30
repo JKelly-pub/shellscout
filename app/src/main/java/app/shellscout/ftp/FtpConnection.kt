@@ -255,7 +255,7 @@ class FtpConnection(override val host: HostEntity, private val deps: SshDeps) : 
         }
     }
 
-    override suspend fun disconnect(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun disconnect(reason: String): Unit = withContext(Dispatchers.IO) {
         closed = true
         scope.cancel()
         // Not under the lock: an operation in progress fails rather than holding up the close.
@@ -263,7 +263,7 @@ class FtpConnection(override val host: HostEntity, private val deps: SshDeps) : 
         control = null
         password?.fill('\u0000')
         password = null
-        if (_state.value !is ConnState.Disconnected) _state.value = ConnState.Disconnected("Disconnected")
+        if (_state.value !is ConnState.Disconnected) _state.value = ConnState.Disconnected(reason)
     }
 
     private fun quietly(client: FTPClient) {

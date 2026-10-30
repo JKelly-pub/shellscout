@@ -1,5 +1,8 @@
 package app.shellscout.ui.prompts
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,6 +64,8 @@ fun PromptHost(broker: PromptBroker) {
         is Prompt.Interactive -> InteractiveDialog(prompt) { broker.answer(prompt, it) }
         is Prompt.FileConflict -> ConflictDialog(prompt) { broker.answer(prompt, it) }
         is Prompt.SnippetVariables -> VariablesDialog(prompt) { broker.answer(prompt, it) }
+        is Prompt.VpnPermission -> VpnPermissionDialog(prompt) { broker.answer(prompt, it) }
+        is Prompt.SwitchTunnel -> SwitchTunnelDialog(prompt) { broker.answer(prompt, it) }
     }
 }
 
@@ -220,5 +225,45 @@ private fun VariablesDialog(p: Prompt.SnippetVariables, answer: (Map<String, Str
         },
         confirmButton = { TextButton(onClick = { answer(values.toMap()) }) { Text("Send") } },
         dismissButton = { TextButton(onClick = { answer(null) }) { Text("Cancel") } },
+    )
+}
+
+/** Says why before Android's own VPN consent dialog, which only names the app. */
+@Composable
+private fun VpnPermissionDialog(p: Prompt.VpnPermission, answer: (Boolean) -> Unit) {
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        answer(it.resultCode == Activity.RESULT_OK)
+    }
+    AlertDialog(
+        onDismissRequest = { answer(false) },
+        title = { Text("Allow the WireGuard VPN") },
+        text = {
+            Text(
+                "ShellScout runs WireGuard tunnels as Android's VPN. Android asks once whether to allow it. " +
+                    "While a tunnel is up, the device's traffic to its AllowedIPs goes through it, and any other VPN app is turned off.",
+            )
+        },
+        confirmButton = { TextButton(onClick = { consent.launch(p.intent) }) { Text("Continue") } },
+        dismissButton = { TextButton(onClick = { answer(false) }) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun SwitchTunnelDialog(p: Prompt.SwitchTunnel, answer: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { answer(false) },
+        title = { Text("Switch to ${p.to}?") },
+        text = {
+            Text(
+                "Only one WireGuard tunnel can run at a time. ${p.from} will stop" +
+                    when (p.sessionsUsing) {
+                        0 -> "."
+                        1 -> ", and the session using it will lose its connection."
+                        else -> ", and the ${p.sessionsUsing} sessions using it will lose their connections."
+                    },
+            )
+        },
+        confirmButton = { TextButton(onClick = { answer(true) }) { Text("Switch") } },
+        dismissButton = { TextButton(onClick = { answer(false) }) { Text("Keep ${p.from}") } },
     )
 }

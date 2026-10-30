@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Terminal
@@ -60,18 +61,20 @@ import app.shellscout.ui.session.SessionsScreen
 import app.shellscout.ui.settings.SettingsScreen
 import app.shellscout.ui.snippets.SnippetsScreen
 import app.shellscout.ui.transfers.TransfersScreen
+import app.shellscout.ui.wireguard.WireGuardScreen
 
 enum class Dest(val label: String, val icon: ImageVector) {
     HOSTS("Hosts", Icons.Default.Dns),
     SESSIONS("Sessions", Icons.Default.Terminal),
     TRANSFERS("Transfers", Icons.Default.SwapVert),
+    WIREGUARD("WireGuard", Icons.Default.VpnLock),
     SNIPPETS("Snippets", Icons.AutoMirrored.Filled.ShortText),
     KEYS("Keys", Icons.Default.Key),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
-/** UI-03: four destinations in a bottom bar on phone. UI-04: everything on a navigation rail on tablet. */
-private val PHONE_DESTS = listOf(Dest.HOSTS, Dest.SESSIONS, Dest.TRANSFERS, Dest.SNIPPETS)
+/** UI-03: five destinations in a bottom bar on phone. UI-04: everything on a navigation rail on tablet. */
+private val PHONE_DESTS = listOf(Dest.HOSTS, Dest.SESSIONS, Dest.TRANSFERS, Dest.WIREGUARD, Dest.SNIPPETS)
 
 @Composable
 fun AppRoot(activity: FragmentActivity) {
@@ -83,6 +86,7 @@ fun AppRoot(activity: FragmentActivity) {
     val message by container.sessions.messages.collectAsState()
     val activeTransfers by container.transfers.activeCount.collectAsState()
     val pendingShares by container.sessions.pendingShares.collectAsState()
+    val tunnel by container.wireguard.active.collectAsState()
     var dest by rememberSaveable { mutableStateOf(Dest.HOSTS) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -131,6 +135,7 @@ fun AppRoot(activity: FragmentActivity) {
                     }
                     Dest.SESSIONS -> SessionsScreen(formFactor, onConnect = connect)
                     Dest.TRANSFERS -> TransfersScreen()
+                    Dest.WIREGUARD -> WireGuardScreen()
                     Dest.SNIPPETS -> SnippetsScreen()
                     Dest.KEYS -> KeysScreen(onBack = if (formFactor == FormFactor.PHONE) goBack else null)
                     Dest.SETTINGS -> SettingsScreen(
@@ -146,6 +151,7 @@ fun AppRoot(activity: FragmentActivity) {
             when {
                 d == Dest.SESSIONS && tabs.isNotEmpty() -> Badge { Text("${tabs.size}") }
                 d == Dest.TRANSFERS && activeTransfers > 0 -> Badge { Text("$activeTransfers") }
+                d == Dest.WIREGUARD && tunnel != null -> Badge()
             }
         }
 

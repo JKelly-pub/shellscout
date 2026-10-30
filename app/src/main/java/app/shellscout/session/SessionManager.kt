@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.PersistableBundle
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ import app.shellscout.ssh.RemoteFs
 import app.shellscout.ssh.SshConnection
 import app.shellscout.ssh.SshDeps
 import app.shellscout.ssh.SshTerminalTransport
+import app.shellscout.vpn.WireGuardManager
 import java.util.UUID
 
 /** What a tab shows: the terminal, the file browser, or both side by side (tablet). */
@@ -62,6 +64,7 @@ class SessionManager(
     private val context: Context,
     private val deps: SshDeps,
     private val settings: AppSettings,
+    private val wireguard: WireGuardManager,
     private val scope: CoroutineScope,
 ) {
     private val _tabs = MutableStateFlow<List<SessionTab>>(emptyList())
@@ -116,8 +119,26 @@ class SessionManager(
     private fun connect(tab: SessionTab) {
         tab.terminal.value = null
         scope.launch {
+            val connection = tab.connection
+            // A host pinned to a WireGuard config needs its tunnel up first. Reconnecting keeps the claim.
+            tab.host.wgConfigId?.let { configId ->
+                try {
+                    wireguard.acquire(configId, tab.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val reason = "WireGuard: ${e.message}"
+                    connection.disconnect(reason)
+                    post("${tab.host.name}: $reason")
+                    return@launch
+                }
+                // Closed while the tunnel was starting (or waiting for consent): hand the claim back.
+                if (_tabs.value.none { it.id == tab.id }) {
+                    wireguard.release(tab.id)
+                    return@launch
+                }
+            }
             try {
-                val connection = tab.connection
                 connection.connect()
                 if (connection !is SshConnection) return@launch
                 val transport = SshTerminalTransport(connection, scope, tab.host.startDirectory)
@@ -133,6 +154,7 @@ class SessionManager(
     fun close(tab: SessionTab) {
         tab.terminal.value?.finishIfRunning()
         scope.launch { tab.connection.disconnect() }
+        wireguard.release(tab.id)
         _tabs.update { list -> list.filterNot { it.id == tab.id } }
         if (_activeTabId.value == tab.id) _activeTabId.value = _tabs.value.lastOrNull()?.id
     }

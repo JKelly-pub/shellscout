@@ -5,6 +5,17 @@ Release APKs, checksums and signing details are on the
 
 ## Unreleased
 
+### New: WireGuard
+- A new **WireGuard** tab. Import a config from a `.conf` file, by scanning its QR code, or by
+  pasting the text. Start and stop the tunnel there, and see traffic and the latest handshake.
+- **Pin a config to hosts**, from the tab (Pin to hosts) or the host editor (WireGuard tunnel).
+  Connecting to a pinned host starts its tunnel first. A tunnel started that way stops when the last
+  session using it closes; one you start from the tab runs until you stop it.
+- Tunnels run as Android's VPN through the official WireGuard library (wireguard-go). Android asks
+  once for VPN permission. Only one tunnel can run at a time, and starting another asks first.
+- Configs are stored encrypted, like passwords and keys. The notification shows the running tunnel,
+  and Disconnect all stops it too.
+
 ### New: FTP and FTPS
 - Hosts can now use **FTP** or **FTPS** (FTP over TLS, explicit `AUTH TLS`) as well as SSH. Choose
   the protocol when you edit a host, or quick connect with `ftp://user@host` or `ftps://user@host`.

@@ -19,6 +19,9 @@ sshj = "0.41.2"
 bouncycastle = "1.85"
 slf4j = "2.0.16"
 commonsNet = "3.13.0"
+wireguard = "1.0.20260102"
+zxingEmbedded = "4.3.0"
+zxingCore = "3.5.4"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -46,6 +49,9 @@ bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = 
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 commons-net = { module = "commons-net:commons-net", version.ref = "commonsNet" }
+wireguard-tunnel = { module = "com.wireguard.android:tunnel", version.ref = "wireguard" }
+zxing-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingEmbedded" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxingCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

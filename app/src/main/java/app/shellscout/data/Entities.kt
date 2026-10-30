@@ -44,6 +44,17 @@ data class HostEntity(
     val lastConnectedAt: Long? = null,
     @ColumnInfo(defaultValue = "SSH")
     val protocol: Protocol = Protocol.SSH,
+    /** A WireGuard config ([WgConfigEntity]) brought up before connecting; null = none. */
+    val wgConfigId: Long? = null,
+)
+
+/** An imported WireGuard config. The wg-quick text holds the private key, so it is vault-encrypted. */
+@Entity(tableName = "wg_configs")
+data class WgConfigEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val encryptedConfig: String,
+    val createdAt: Long = System.currentTimeMillis(),
 )
 
 enum class KeyFormat {

@@ -54,7 +54,7 @@ interface RemoteConnection {
     val state: StateFlow<ConnState>
     val isConnected: Boolean
     suspend fun connect()
-    suspend fun disconnect()
+    suspend fun disconnect(reason: String = "Disconnected")
     fun fs(): RemoteFs
 }
 

@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- SC-07: only network, foreground service, notifications and biometric. Storage goes through SAF. -->
+    <!-- SC-07: only network, foreground service, notifications and biometric. Storage goes through SAF.
+         Merged from libraries: CAMERA (ZXing, only while scanning a WireGuard QR code) and the
+         WireGuard VpnService, which Android only lets run after the user consents. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -48,8 +50,14 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps user-initiated interactive SSH terminal sessions and SFTP transfers alive while the app is in the background." />
+                android:value="Keeps user-initiated interactive SSH terminal sessions, SFTP and FTP transfers and the user's WireGuard tunnel alive while the app is in the background." />
         </service>
+
+        <!-- Scan WireGuard QR codes in either orientation (ZXing locks to landscape by default). -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="fullSensor"
+            tools:replace="screenOrientation" />
 
         <!-- FT-09: hand downloaded remote files to other apps. -->
         <provider

@@ -24,6 +24,9 @@ Modified files say so in their header.
 | com.hierynomus:sshj | 0.41.2 | Apache-2.0 |
 | com.hierynomus:asn-one (via sshj) | 0.6.0 | Apache-2.0 |
 | commons-net:commons-net (Apache Commons Net, used for FTP and FTPS) | 3.13.0 | Apache-2.0 |
+| com.wireguard.android:tunnel (WireGuard userspace backend) | 1.0.20260102 | Apache-2.0 |
+| wireguard-go and the Go runtime, inside the tunnel library's `libwg-go.so` | as built by WireGuard | MIT / BSD-3-Clause |
+| com.journeyapps:zxing-android-embedded, com.google.zxing:core (QR scanning) | 4.3.0 / 3.5.4 | Apache-2.0 |
 | org.bouncycastle:bcprov-jdk18on / bcpkix-jdk18on / bcutil-jdk18on | 1.85 | Bouncy Castle Licence (MIT-style) |
 | org.slf4j:slf4j-api / slf4j-nop | 2.0.17 / 2.0.16 | MIT |
 | AndroidX (Compose, Material 3, Room, Lifecycle, Activity, Fragment, Biometric, DocumentFile, Core and their dependencies) | see `gradle/libs.versions.toml` | Apache-2.0 |
@@ -37,6 +40,10 @@ Copyright 2001-2026 The Apache Software Foundation
 
 This product includes software developed at The Apache Software Foundation
 (https://www.apache.org/).
+
+The tunnel library also ships `libwg.so` and `libwg-quick.so` (wireguard-tools, GPL-2.0) for its root
+backend. ShellScout doesn't use that backend and leaves both out of the APK (`packaging.jniLibs` in
+`app/build.gradle.kts`).
 
 Regenerate the full list, including transitive dependencies, with
 `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`.

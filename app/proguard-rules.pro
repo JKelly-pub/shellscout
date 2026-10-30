@@ -13,3 +13,8 @@
 # Commons Net picks FTP listing parsers by name; keep them all.
 -keep class org.apache.commons.net.ftp.parser.** { *; }
 -dontwarn org.apache.commons.net.**
+
+# The WireGuard backend is reached from native code (JNI) and its VpnService by name.
+-keep class com.wireguard.android.backend.** { *; }
+-keep class com.wireguard.config.** { *; }
+-keep class com.wireguard.crypto.** { *; }

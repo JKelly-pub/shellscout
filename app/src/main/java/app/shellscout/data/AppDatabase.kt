@@ -35,6 +35,12 @@ interface HostDao {
     @Query("UPDATE hosts SET lastConnectedAt = :at WHERE id = :id")
     suspend fun markConnected(id: Long, at: Long)
 
+    @Query("UPDATE hosts SET wgConfigId = NULL WHERE wgConfigId = :configId")
+    suspend fun clearWgConfig(configId: Long)
+
+    @Query("UPDATE hosts SET wgConfigId = :configId WHERE id IN (:hostIds)")
+    suspend fun setWgConfig(hostIds: List<Long>, configId: Long?)
+
     @Query("SELECT DISTINCT groupName FROM hosts WHERE groupName != '' ORDER BY groupName COLLATE NOCASE")
     fun observeGroups(): Flow<List<String>>
 }
@@ -52,6 +58,24 @@ interface KeyDao {
 
     @Delete
     suspend fun delete(key: KeyEntity)
+}
+
+@Dao
+interface WgConfigDao {
+    @Query("SELECT * FROM wg_configs ORDER BY name COLLATE NOCASE")
+    fun observeAll(): Flow<List<WgConfigEntity>>
+
+    @Query("SELECT * FROM wg_configs WHERE id = :id")
+    suspend fun get(id: Long): WgConfigEntity?
+
+    @Insert
+    suspend fun insert(config: WgConfigEntity): Long
+
+    @Update
+    suspend fun update(config: WgConfigEntity)
+
+    @Delete
+    suspend fun delete(config: WgConfigEntity)
 }
 
 @Dao
@@ -129,11 +153,12 @@ class Converters {
 }
 
 @Database(
-    entities = [HostEntity::class, KeyEntity::class, KnownHostEntity::class, SnippetEntity::class, TransferEntity::class],
-    version = 2,
+    entities = [HostEntity::class, KeyEntity::class, KnownHostEntity::class, SnippetEntity::class, TransferEntity::class, WgConfigEntity::class],
+    version = 3,
     exportSchema = true,
     // 2: hosts.protocol (SSH, FTP or FTPS); existing hosts are SSH.
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    // 3: wg_configs, and hosts.wgConfigId to bring a WireGuard tunnel up before connecting.
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -142,6 +167,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun knownHosts(): KnownHostDao
     abstract fun snippets(): SnippetDao
     abstract fun transfers(): TransferDao
+    abstract fun wgConfigs(): WgConfigDao
 
     companion object {
         fun create(context: Context): AppDatabase =

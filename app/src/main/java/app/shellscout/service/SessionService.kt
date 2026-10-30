@@ -20,8 +20,9 @@ import app.shellscout.R
 import app.shellscout.ShellScoutApp
 
 /**
- * SE-02 / FT-06: a foreground service that keeps the process alive while any session is open or
- * any transfer is running, with a persistent notification. It stops itself when both are idle.
+ * SE-02 / FT-06: a foreground service that keeps the process alive while any session is open, any
+ * transfer is running or a WireGuard tunnel is up, with a persistent notification. It stops itself
+ * when all are idle.
  * Connections themselves live in [app.shellscout.session.SessionManager].
  */
 class SessionService : LifecycleService() {
@@ -31,16 +32,18 @@ class SessionService : LifecycleService() {
         createChannel()
         val app = application as ShellScoutApp
         ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, notification(0, 0),
+            this, NOTIFICATION_ID, notification(0, 0, null),
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0,
         )
         lifecycleScope.launch {
-            combine(app.container.sessions.tabs, app.container.transfers.activeCount) { tabs, active -> tabs.size to active }
-                .collect { (tabs, active) ->
-                    if (tabs == 0 && active == 0) {
+            combine(app.container.sessions.tabs, app.container.transfers.activeCount, app.container.wireguard.active) { tabs, active, wg ->
+                Triple(tabs.size, active, wg?.name)
+            }
+                .collect { (tabs, active, tunnel) ->
+                    if (tabs == 0 && active == 0 && tunnel == null) {
                         stopSelf()
                     } else {
-                        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(tabs, active))
+                        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(tabs, active, tunnel))
                     }
                 }
         }
@@ -49,12 +52,14 @@ class SessionService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_DISCONNECT_ALL) {
-            (application as ShellScoutApp).container.sessions.closeAll()
+            val container = (application as ShellScoutApp).container
+            container.sessions.closeAll()
+            container.scope.launch { container.wireguard.stop() }
         }
         return START_NOT_STICKY
     }
 
-    private fun notification(tabs: Int, transfers: Int): Notification {
+    private fun notification(tabs: Int, transfers: Int, tunnel: String?): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -66,6 +71,7 @@ class SessionService : LifecycleService() {
         val text = buildList {
             if (tabs > 0) add(if (tabs == 1) "1 session" else "$tabs sessions")
             if (transfers > 0) add(if (transfers == 1) "1 transfer running" else "$transfers transfers running")
+            if (tunnel != null) add("WireGuard: $tunnel")
         }.joinToString(" · ").ifEmpty { "Starting…" }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)

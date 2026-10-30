@@ -30,6 +30,13 @@ external monitor.
 - Extract .zip and tar archives on the server
 - Share files from other apps straight into ShellScout to upload them
 
+**WireGuard**
+- Import WireGuard configs from a file, a QR code or pasted text
+- Start and stop tunnels from the WireGuard tab, with live traffic and handshake status
+- Pin a config to one or more hosts: connecting to the host starts the tunnel first, and it stops
+  again when the last session using it closes
+- Runs as Android's VPN using the official WireGuard library, so one tunnel (and one VPN app) at a time
+
 **Remote editing**
 - Edit text files on the server directly, with syntax highlighting and find and replace
 - Warns you if the file was changed on the server since you opened it
@@ -61,6 +68,8 @@ external monitor.
   you to check once, like a host key. Plain FTP is unencrypted and marked as such.
 - Only modern SSH algorithms by default; older ones can be allowed per host when needed
 - Optional screenshot blocking and automatic clipboard clearing
+- WireGuard configs, including their private keys, are encrypted with the Android Keystore. The
+  camera is only used while scanning a config QR code.
 - No analytics, no ads, no cloud backup, and no network traffic except to your own servers
 
 ## Install
