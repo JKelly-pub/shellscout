@@ -3,6 +3,23 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
+## 0.7.1 (2026-11-21)
+
+### New
+- **Show or hide a password while you type it.** Password boxes now have an eye button: in the host
+  editor, when you're asked for a password on connect, and for a key's passphrase.
+
+### Changes
+- A saved host password now shows as dots in the host editor. Leave it to keep the password, or
+  delete it and type a new one. The saved password can't be revealed from the editor.
+
+### Fixes
+- Typing a host name or username could drop letters with some keyboards. Autocorrect is now off
+  for both.
+- On narrow screens and large font sizes, the host name box was too small to show a full name, so
+  it looked cut off. It now has its own full-width row.
+- The FTPS option no longer squeezes into a vertical column on narrow screens.
+
 ## 0.7.0 (2026-10-30)
 
 ### New: WireGuard
