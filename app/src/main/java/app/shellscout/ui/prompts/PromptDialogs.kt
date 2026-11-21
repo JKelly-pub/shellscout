@@ -1,5 +1,6 @@
 package app.shellscout.ui.prompts
 
+import app.shellscout.ui.common.PasswordField
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -137,12 +138,7 @@ private fun SecretDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(message)
-                OutlinedTextField(
-                    value = value, onValueChange = { value = it }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                PasswordField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth())
                 if (rememberLabel != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = keep, onCheckedChange = { keep = it })

@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,7 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import app.shellscout.ui.common.PasswordField
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -292,7 +294,10 @@ fun parseQuickConnect(input: String): HostEntity? {
     return HostEntity(name = "$user@$host", hostname = host, port = port, username = user, protocol = protocol)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Stand-in text for a saved password in the host editor; always masked and never saved. */
+private const val SAVED_PASSWORD_MASK = "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifier = Modifier) {
     val container = LocalContainer.current
@@ -309,6 +314,9 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
     var keyId by remember(initial.id) { mutableStateOf(initial.keyId) }
     var savePassword by remember(initial.id) { mutableStateOf(initial.savePassword) }
     var newPassword by remember(initial.id) { mutableStateOf("") }
+    // True while the saved password is untouched. The field then shows placeholder dots, never the real password,
+    // which is not decrypted here, so it can't be revealed. Any edit clears it for a new password.
+    var keepSavedPassword by remember(initial.id) { mutableStateOf(initial.encryptedPassword != null) }
     var keepAlive by remember(initial.id) { mutableStateOf(initial.keepAliveSeconds?.toString().orEmpty()) }
     var termType by remember(initial.id) { mutableStateOf(initial.termType) }
     var startDir by remember(initial.id) { mutableStateOf(initial.startDirectory.orEmpty()) }
@@ -321,19 +329,25 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
     val effectiveAuth = if (isSsh) auth else AuthMethod.PASSWORD
 
     val portNum = port.toIntOrNull()
-    val valid = hostname.isNotBlank() && username.isNotBlank() && portNum != null && portNum in 1..65535 &&
+    // Trimmed here, not in onValueChange: rewriting the text mid-word desyncs the keyboard's composition and drops input.
+    val host = hostname.trim()
+    val user = username.trim()
+    val valid = host.isNotBlank() && user.isNotBlank() && portNum != null && portNum in 1..65535 &&
         (effectiveAuth == AuthMethod.PASSWORD || keyId != null)
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // FlowRow so a narrow pane wraps whole options instead of squeezing the last label into a vertical column.
+        FlowRow {
             Protocol.entries.forEach { p ->
-                RadioButton(selected = protocol == p, onClick = {
-                    // Follow the protocol's usual port unless the user has set their own.
-                    if (port == protocol.defaultPort.toString()) port = p.defaultPort.toString()
-                    protocol = p
-                })
-                Text(p.name, modifier = Modifier.padding(end = 8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = protocol == p, onClick = {
+                        // Follow the protocol's usual port unless the user has set their own.
+                        if (port == protocol.defaultPort.toString()) port = p.defaultPort.toString()
+                        protocol = p
+                    })
+                    Text(p.name, modifier = Modifier.padding(end = 8.dp))
+                }
             }
         }
         when (protocol) {
@@ -347,18 +361,21 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                hostname, { hostname = it.trim() }, label = { Text("Host or IP") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
-                isError = portNum == null || portNum !in 1..65535,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.width(96.dp),
-            )
-        }
-        OutlinedTextField(username, { username = it.trim() }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        // Host gets its own full-width row: beside Port, in the editor pane at large font scales, it showed ~11 characters
+        // with no ellipsis, so a full hostname looked truncated.
+        OutlinedTextField(
+            hostname, { hostname = it }, label = { Text("Host or IP") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
+            isError = portNum == null || portNum !in 1..65535,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.widthIn(min = 96.dp, max = 200.dp),
+        )
+        OutlinedTextField(
+            username, { username = it }, label = { Text("Username") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth(),
+        )
 
         // HM-03: free-text group with existing groups offered.
         var groupMenu by remember { mutableStateOf(false) }
@@ -386,11 +403,20 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
                 Text("  Save password on this device", modifier = Modifier.weight(1f))
             }
             if (savePassword) {
-                OutlinedTextField(
-                    newPassword, { newPassword = it }, singleLine = true,
-                    label = { Text(if (initial.encryptedPassword != null) "Password (leave blank to keep)" else "Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                // The saved password is never decrypted into this field; it stays empty, and typing replaces it.
+                PasswordField(
+                    value = if (keepSavedPassword) SAVED_PASSWORD_MASK else newPassword,
+                    onValueChange = {
+                        if (keepSavedPassword) {
+                            keepSavedPassword = false
+                            // Typing after the dots starts the new password with what was typed; anything else clears it.
+                            newPassword = if (it.startsWith(SAVED_PASSWORD_MASK)) it.removePrefix(SAVED_PASSWORD_MASK) else ""
+                        } else {
+                            newPassword = it
+                        }
+                    },
+                    label = { Text("Password") },
+                    allowReveal = !keepSavedPassword,
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
@@ -463,12 +489,14 @@ private fun HostEditor(initial: HostEntity, onDone: () -> Unit, modifier: Modifi
                 scope.launch {
                     val encrypted = when {
                         effectiveAuth != AuthMethod.PASSWORD || !savePassword -> null
+                        keepSavedPassword -> initial.encryptedPassword
                         newPassword.isNotEmpty() -> container.vault.encryptString(newPassword)
-                        else -> initial.encryptedPassword
+                        // Cleared and left empty: nothing saved, so it's asked for on connect.
+                        else -> null
                     }
                     val updated = initial.copy(
-                        name = name.ifBlank { "$username@$hostname" },
-                        hostname = hostname, port = portNum ?: 22, username = username, groupName = group.trim(),
+                        name = name.ifBlank { "$user@$host" },
+                        hostname = host, port = portNum ?: 22, username = user, groupName = group.trim(),
                         authMethod = effectiveAuth, keyId = if (effectiveAuth == AuthMethod.KEY) keyId else null,
                         savePassword = encrypted != null, encryptedPassword = encrypted,
                         keepAliveSeconds = keepAlive.toIntOrNull()?.takeIf { it > 0 },

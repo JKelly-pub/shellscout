@@ -1,5 +1,6 @@
 package app.shellscout.ui.keys
 
+import app.shellscout.ui.common.PasswordField
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -50,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -280,11 +280,7 @@ private fun ImportDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (needsPassphrase) {
-                    OutlinedTextField(
-                        passphrase, { passphrase = it }, label = { Text("Passphrase") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth(),
-                    )
+                    PasswordField(passphrase, { passphrase = it }, label = { Text("Passphrase") }, modifier = Modifier.fillMaxWidth())
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
