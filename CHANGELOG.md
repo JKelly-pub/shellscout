@@ -3,6 +3,17 @@
 Release APKs, checksums and signing details are on the
 [releases page](https://github.com/JKelly-pub/shellscout/releases).
 
+## 0.7.2 (2026-11-23)
+
+### New
+- **Copy files and folders on FTP and FTPS hosts.** Servers that support `SITE CPFR`/`CPTO`
+  (ProFTPD's mod_copy) make the copy themselves. On other servers, ShellScout downloads each file
+  and uploads it straight back. Nothing is saved on your device, but it asks first and shows how
+  much will be transferred, since large files can take a while and use mobile data. If a copy fails
+  or you cancel it, the half-written file is removed.
+- **Move and Copy in each file's menu.** Pick one, open the destination folder and tap Paste, just
+  like Cut and Copy when selecting several files.
+
 ## 0.7.1 (2026-11-21)
 
 ### New
