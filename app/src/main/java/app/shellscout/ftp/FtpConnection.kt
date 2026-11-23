@@ -65,6 +65,10 @@ class FtpConnection(override val host: HostEntity, private val deps: SshDeps) : 
     var hasSize = false
         private set
 
+    /** Server copies with SITE CPFR/CPTO (ProFTPD mod_copy); null until [FtpFs] has asked. */
+    @Volatile
+    var hasSiteCopy: Boolean? = null
+
     override val isConnected: Boolean get() = _state.value == ConnState.Connected
 
     override fun fs(): FtpFs = FtpFs(this)

@@ -65,7 +65,7 @@ interface RemoteConnection {
  */
 abstract class RemoteFs {
 
-    /** Copying runs on the server (cp over SSH); FTP has no copy command. */
+    /** Whether [paste] can copy. SSH copies on the server with cp; FTP relays each file through the device. */
     abstract val canCopy: Boolean
 
     /** Unpacking archives needs a shell on the server. */
@@ -100,6 +100,9 @@ abstract class RemoteFs {
 
     /** Called when [rename] fails during a move, e.g. across filesystems. By default the rename's error stands. */
     protected open suspend fun moveOnServer(from: String, to: String, renameError: Throwable): Unit = throw renameError
+
+    /** True if a copy has to pass every byte through the device (download and upload again) instead of running on the server. */
+    open suspend fun copiesThroughDevice(): Boolean = false
 
     protected open suspend fun copyOnServer(from: String, to: String): Unit =
         throw UnsupportedOperationException("This server can't copy files")

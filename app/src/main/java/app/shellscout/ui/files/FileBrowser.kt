@@ -361,9 +361,14 @@ private fun RemotePane(
         tab.fileClipboard.value = RemoteClipboard(selectedEntries, cut)
         endSelection()
     }
-    fun paste() {
+    fun paste(relayConfirmed: Boolean = false) {
         val clip = clipboard ?: return
         val d = dir ?: return
+        if (!clip.cut && !relayConfirmed) {
+            // Big files on a server that can't copy by itself: ask before sending them down and back up.
+            perform { if (fs.copiesThroughDevice()) dialog = RemoteDialog.RelayCopy(clip) else paste(relayConfirmed = true) }
+            return
+        }
         container.sessions.post(if (clip.cut) "Moving…" else "Copying…")
         perform {
             // A failed move may have moved some items already, so the cut list is spent either way.
@@ -425,7 +430,6 @@ private fun RemotePane(
                     Icon(Icons.Default.SelectAll, if (allSelected) "Select none" else "Select all")
                 }
                 IconButton(onClick = { putOnClipboard(cut = true) }, enabled = any) { Icon(Icons.Default.ContentCut, "Cut") }
-                // FTP can move on the server but not copy.
                 if (fs.canCopy) IconButton(onClick = { putOnClipboard(cut = false) }, enabled = any) { Icon(Icons.Default.ContentCopy, "Copy") }
                 IconButton(onClick = { onDownload(selectedEntries); endSelection() }, enabled = any) { Icon(Icons.Default.CloudDownload, "Download") }
                 IconButton(onClick = { dialog = RemoteDialog.Delete(selectedEntries) }, enabled = any) { Icon(Icons.Default.Delete, "Delete") }
@@ -523,6 +527,15 @@ private fun RemotePane(
                         perform { container.sessions.post("Extracted to ${fs.extract(e).substringAfterLast('/')}") }
                     })
                     DropdownMenuItem(text = { Text("Rename") }, onClick = { close(); dialog = RemoteDialog.Rename(e) })
+                    // Same as Cut / Copy in selection mode: go to the destination folder and tap Paste here.
+                    DropdownMenuItem(
+                        text = { Text("Move") }, leadingIcon = { Icon(Icons.Default.ContentCut, null) },
+                        onClick = { close(); tab.fileClipboard.value = RemoteClipboard(listOf(e), cut = true) },
+                    )
+                    if (fs.canCopy) DropdownMenuItem(
+                        text = { Text("Copy") }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
+                        onClick = { close(); tab.fileClipboard.value = RemoteClipboard(listOf(e), cut = false) },
+                    )
                     DropdownMenuItem(text = { Text("Permissions") }, onClick = { close(); dialog = RemoteDialog.Chmod(e) })
                     DropdownMenuItem(text = { Text("Delete") }, onClick = { close(); dialog = RemoteDialog.Delete(listOf(e)) })
                 }
@@ -551,6 +564,30 @@ private fun RemotePane(
             validate = { it.matches(Regex("[0-7]{3,4}")) },
         ) { octal ->
             dialog = null; perform { fs.chmod(d.entry.path, octal.toInt(8)) }
+        }
+        is RemoteDialog.RelayCopy -> {
+            val files = d.clip.entries.filter { !it.isDirectory }
+            val hasFolders = d.clip.entries.any { it.isDirectory }
+            val amount = when {
+                files.isEmpty() -> "everything in the folders"
+                hasFolders -> formatBytes(files.sumOf { it.size }) + " plus everything in the folders"
+                else -> formatBytes(files.sumOf { it.size })
+            }
+            AlertDialog(
+                onDismissRequest = { dialog = null },
+                title = { Text("Copy through this device?") },
+                text = {
+                    Text(
+                        "This server can't copy files by itself. To make the copy, $amount will be downloaded to " +
+                            "this device and uploaded back to the server. Large files can take a long time and use " +
+                            "mobile data.\n\n" +
+                            "The copy is saved on the server, not on this device.\n\n" +
+                            "Move doesn't have this problem: it happens on the server straight away, with no download.",
+                    )
+                },
+                confirmButton = { TextButton(onClick = { dialog = null; paste(relayConfirmed = true) }) { Text("Copy anyway") } },
+                dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+            )
         }
         is RemoteDialog.Delete -> {
             val one = d.entries.singleOrNull()
@@ -603,6 +640,7 @@ private sealed interface RemoteDialog {
     data class Rename(val entry: RemoteEntry) : RemoteDialog
     data class Chmod(val entry: RemoteEntry) : RemoteDialog
     data class Delete(val entries: List<RemoteEntry>) : RemoteDialog
+    data class RelayCopy(val clip: RemoteClipboard) : RemoteDialog
 }
 
 // --------------------------------------------------------------------------------- local pane

@@ -7,6 +7,8 @@ import app.shellscout.ssh.RemoteDeleteException
 import app.shellscout.ssh.RemoteEntry
 import app.shellscout.ssh.RemoteFs
 import app.shellscout.ssh.RemoteStat
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.io.FilterInputStream
 import java.io.FilterOutputStream
 import java.io.IOException
@@ -15,13 +17,75 @@ import java.io.OutputStream
 
 /**
  * FT-01, FT-04 over FTP. Commands run on the tab's control connection; file contents move on a
- * connection of their own (see [FtpConnection]). FTP can't copy on the server or unpack archives,
- * so the browser doesn't offer those.
+ * connection of their own (see [FtpConnection]). FTP can't unpack archives, so the browser doesn't
+ * offer that; copies are relayed through the device (see [copyOnServer]).
  */
 class FtpFs(private val conn: FtpConnection) : RemoteFs() {
 
-    override val canCopy: Boolean get() = false
+    override val canCopy: Boolean get() = true
     override val canExtract: Boolean get() = false
+
+    override suspend fun copiesThroughDevice(): Boolean = !hasSiteCopy()
+
+    /**
+     * Probes once per connection with a path that can't exist. mod_copy answers 550 naming that path
+     * ("<path>: No such file or directory"). Servers without it reject the command (500, 502, 504),
+     * or, like vsftpd for some logins, answer a bare "550 Permission denied", so a 550 alone proves nothing.
+     */
+    private suspend fun hasSiteCopy(): Boolean = conn.hasSiteCopy ?: conn.withControl { c ->
+        val probe = "/.shellscout-copy-probe-${System.nanoTime()}"
+        c.sendSiteCommand("CPFR $probe")
+        c.replyCode == 350 || c.replyCode == 550 && c.replyString.orEmpty().contains(probe)
+    }.also { conn.hasSiteCopy = it }
+
+    /**
+     * With SITE CPFR/CPTO the server copies by itself, folders included. Otherwise (plain FTP has no
+     * copy command) each file is read from the server and written straight back on a second
+     * connection; nothing is stored on the device, and folders are rebuilt item by item. The browser
+     * warns before that, using [copiesThroughDevice].
+     */
+    override suspend fun copyOnServer(from: String, to: String) {
+        if (hasSiteCopy()) return siteCopy(from, to)
+        relayCopy(from, to)
+    }
+
+    private suspend fun siteCopy(from: String, to: String) = conn.withControl { c ->
+        val name = from.substringAfterLast('/')
+        c.sendSiteCommand("CPFR $from")
+        if (c.replyCode != 350) {
+            // The probe was wrong after all: say so rather than quietly sending gigabytes through the device.
+            if (c.replyCode in UNKNOWN_COMMAND) {
+                conn.hasSiteCopy = false
+                throw FtpException("This server can't copy $name itself. Paste again to copy it through this device.")
+            }
+            throw failure(c, "Can't copy $name")
+        }
+        if (!c.sendSiteCommand("CPTO $to")) throw failure(c, "Can't copy $name")
+    }
+
+    private suspend fun relayCopy(from: String, to: String) {
+        val st = stat(from) ?: throw IOException("${from.substringAfterLast('/')} no longer exists")
+        if (st.isDirectory) {
+            mkdir(to)
+            for (child in list(from)) {
+                // FTP can't make links, and following a folder link could loop forever.
+                if (child.isSymlink && child.isDirectory) throw FtpException("Can't copy the folder link ${child.path}")
+                relayCopy(child.path, join(to, child.name))
+            }
+        } else {
+            copyFile(from, to)
+        }
+    }
+
+    private suspend fun copyFile(from: String, to: String) {
+        try {
+            io { openRead(from).use { input -> openWrite(to).use { output -> input.copyTo(output, 64 * 1024) } } }
+        } catch (e: Throwable) {
+            // Don't leave a half-written copy behind, even when cancelled.
+            withContext(NonCancellable) { runCatching { conn.withControl { it.deleteFile(to) } } }
+            throw e
+        }
+    }
 
     override suspend fun home(): String = conn.home
 
@@ -170,6 +234,9 @@ class FtpFs(private val conn: FtpConnection) : RemoteFs() {
     }
 
     private companion object {
+        /** Replies meaning the server doesn't know the command at all. */
+        val UNKNOWN_COMMAND = setOf(500, 502, 504)
+
         fun failure(c: FTPClient, what: String): IOException = FtpException("$what: ${c.replyString?.trim().orEmpty()}")
 
         fun epochSeconds(f: FTPFile): Long = f.timestamp?.timeInMillis?.div(1000) ?: 0
